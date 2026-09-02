@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-CottageApplication<cottage>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "com.bakery.cottage.CottageApplication",
+            "projectName": "cottage",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}
