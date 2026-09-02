@@ -315,4 +315,104 @@ public class AuthServiceTest {
         assertNotNull(token.getRevokedAt());
         verify(refreshTokenRepository, times(1)).save(token);
     }
+
+    @Test
+    void login_Shopkeeper_ReturnsJwtWithShopkeeperRole() {
+        User shopkeeper = User.builder()
+                .id("shopkeeper-uuid")
+                .fullName("Shop Manager")
+                .email("shopkeeper@example.com")
+                .phoneNumber("9876543212")
+                .password("hashed_password")
+                .role(Role.SHOPKEEPER)
+                .emailVerified(true)
+                .enabled(true)
+                .build();
+
+        when(userRepository.findByEmail("shopkeeper@example.com")).thenReturn(Optional.of(shopkeeper));
+        when(passwordEncoder.matches("Password123!", "hashed_password")).thenReturn(true);
+        when(jwtTokenProvider.generateAccessToken("shopkeeper-uuid", "shopkeeper@example.com", "SHOPKEEPER"))
+                .thenReturn("shopkeeper_jwt_token");
+        when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AuthService.LoginResult result = authService.login("shopkeeper@example.com", "Password123!", "SHOPKEEPER", "127.0.0.1");
+
+        assertNotNull(result);
+        assertEquals("shopkeeper_jwt_token", result.getAccessToken());
+        assertEquals(Role.SHOPKEEPER, result.getUser().getRole());
+    }
+
+    @Test
+    void login_Admin_ReturnsJwtWithAdminRole() {
+        User admin = User.builder()
+                .id("admin-uuid")
+                .fullName("Admin User")
+                .email("admin@example.com")
+                .phoneNumber("9876543213")
+                .password("hashed_password")
+                .role(Role.ADMIN)
+                .emailVerified(true)
+                .enabled(true)
+                .build();
+
+        when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(admin));
+        when(passwordEncoder.matches("Admin@12345", "hashed_password")).thenReturn(true);
+        when(jwtTokenProvider.generateAccessToken("admin-uuid", "admin@example.com", "ADMIN"))
+                .thenReturn("admin_jwt_token");
+        when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AuthService.LoginResult result = authService.login("admin@example.com", "Admin@12345", "ADMIN", "127.0.0.1");
+
+        assertNotNull(result);
+        assertEquals("admin_jwt_token", result.getAccessToken());
+        assertEquals(Role.ADMIN, result.getUser().getRole());
+    }
+
+    @Test
+    void refreshAccessToken_Shopkeeper_PreservesShopkeeperRole() {
+        User shopkeeper = User.builder()
+                .id("shopkeeper-uuid")
+                .fullName("Shop Manager")
+                .email("shopkeeper@example.com")
+                .role(Role.SHOPKEEPER)
+                .emailVerified(true)
+                .enabled(true)
+                .build();
+
+        RefreshToken validToken = RefreshToken.builder()
+                .id("token-uuid")
+                .token("valid_shopkeeper_refresh_token")
+                .user(shopkeeper)
+                .expiryDate(LocalDateTime.now().plusDays(7))
+                .revokedAt(null)
+                .build();
+
+        when(refreshTokenRepository.findByToken("valid_shopkeeper_refresh_token")).thenReturn(Optional.of(validToken));
+        when(jwtTokenProvider.generateAccessToken(eq("shopkeeper-uuid"), eq("shopkeeper@example.com"), eq("SHOPKEEPER")))
+                .thenReturn("new_shopkeeper_jwt");
+        when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        AuthService.LoginResult result = authService.refreshAccessToken("valid_shopkeeper_refresh_token", "127.0.0.1");
+
+        assertNotNull(result);
+        assertEquals("new_shopkeeper_jwt", result.getAccessToken());
+        assertEquals(Role.SHOPKEEPER, result.getUser().getRole());
+    }
+
+    @Test
+    void refreshAccessToken_ExpiredToken_ThrowsException() {
+        RefreshToken expiredToken = RefreshToken.builder()
+                .id("token-uuid")
+                .token("expired_token")
+                .user(testUser)
+                .expiryDate(LocalDateTime.now().minusMinutes(10)) // Expired
+                .revokedAt(null)
+                .build();
+
+        when(refreshTokenRepository.findByToken("expired_token")).thenReturn(Optional.of(expiredToken));
+
+        assertThrows(ExpiredTokenException.class, () ->
+                authService.refreshAccessToken("expired_token", "127.0.0.1")
+        );
+    }
 }

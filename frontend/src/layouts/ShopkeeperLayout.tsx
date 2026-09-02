@@ -1,29 +1,24 @@
 import React, { useState } from 'react'
-import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom'
+import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import {
   LayoutDashboard,
   CakeSlice,
-  Folders,
   ClipboardList,
   Flame,
-  Boxes,
-  Truck,
-  Users,
-  MessageSquare,
   User,
-  Bell,
   LogOut,
   Menu,
   X,
   ChevronDown,
   Activity,
+  Sparkles,
 } from 'lucide-react'
-
 
 export const ShopkeeperLayout: React.FC = () => {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [userDropdownOpen, setUserDropdownOpen] = useState(false)
 
@@ -32,19 +27,15 @@ export const ShopkeeperLayout: React.FC = () => {
     navigate('/login', { replace: true })
   }
 
-  const navItems = [
-    { label: 'Kitchen Dashboard', icon: LayoutDashboard, to: '/shopkeeper/dashboard', active: true },
-    { label: 'Manage Products', icon: CakeSlice, to: '/shopkeeper/dashboard#products', badge: 'Soon' },
-    { label: 'Product Categories', icon: Folders, to: '/shopkeeper/dashboard#categories', badge: 'Soon' },
-    { label: 'Manage Orders', icon: ClipboardList, to: '/shopkeeper/dashboard#orders', badge: 'Live' },
-    { label: 'Preparation Queue', icon: Flame, to: '/shopkeeper/dashboard#queue', badge: 'Kitchen' },
-    { label: 'Stock & Inventory', icon: Boxes, to: '/shopkeeper/dashboard#inventory', badge: 'Soon' },
-    { label: 'Delivery Schedule', icon: Truck, to: '/shopkeeper/dashboard#delivery', badge: 'Soon' },
-    { label: 'Customer Directory', icon: Users, to: '/shopkeeper/dashboard#customers', badge: 'Soon' },
-    { label: 'Customer Reviews', icon: MessageSquare, to: '/shopkeeper/dashboard#reviews', badge: 'Soon' },
-    { label: 'My Profile', icon: User, to: '/profile', active: true },
+  const currentHash = location.hash || '#overview'
 
-    { label: 'Kitchen Notifications', icon: Bell, to: '/shopkeeper/dashboard#notifications', badge: '0' },
+  const navItems = [
+    { label: 'Kitchen Overview', icon: LayoutDashboard, hash: '#overview', to: '/shopkeeper/dashboard#overview' },
+    { label: 'Kitchen Queue', icon: Flame, hash: '#queue', to: '/shopkeeper/dashboard#queue', badge: 'Live' },
+    { label: 'Manage Orders', icon: ClipboardList, hash: '#orders', to: '/shopkeeper/dashboard#orders' },
+    { label: 'Custom Cakes', icon: Sparkles, hash: '#custom_cakes', to: '/shopkeeper/dashboard#custom_cakes' },
+    { label: 'Product Reference', icon: CakeSlice, hash: '#products', to: '/shopkeeper/dashboard#products' },
+    { label: 'My Profile', icon: User, hash: '', to: '/profile' },
   ]
 
   return (
@@ -63,7 +54,7 @@ export const ShopkeeperLayout: React.FC = () => {
               >
                 {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
               </button>
-              <Link to="/shopkeeper/dashboard" className="flex items-center gap-2.5">
+              <Link to="/shopkeeper/dashboard#overview" className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-600 to-amber-800 flex items-center justify-center text-white shadow-md font-serif font-bold text-lg">
                   P
                 </div>
@@ -128,7 +119,7 @@ export const ShopkeeperLayout: React.FC = () => {
                     <button
                       type="button"
                       onClick={handleLogout}
-                      className="w-full flex items-center gap-2 px-4 py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors text-left"
+                      className="w-full flex items-center gap-2 px-4 py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors text-left cursor-pointer"
                     >
                       <LogOut className="w-4 h-4 text-red-500" />
                       Sign Out
@@ -151,28 +142,31 @@ export const ShopkeeperLayout: React.FC = () => {
             </div>
             {navItems.map((item) => {
               const Icon = item.icon
+              const isActive = item.hash ? currentHash === item.hash : location.pathname === item.to
               return (
-                <NavLink
+                <Link
                   key={item.label}
                   to={item.to}
-                  className={({ isActive }) =>
-                    `flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all group ${
-                      isActive && item.to === '/shopkeeper/dashboard'
-                        ? 'bg-amber-600 text-white font-semibold shadow-sm'
-                        : 'text-stone-700 hover:bg-amber-50 hover:text-amber-900'
-                    }`
-                  }
+                  className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all group ${
+                    isActive
+                      ? 'bg-amber-600 text-white font-semibold shadow-sm'
+                      : 'text-stone-700 hover:bg-amber-50 hover:text-amber-900'
+                  }`}
                 >
                   <div className="flex items-center gap-3">
                     <Icon className="w-4 h-4 shrink-0 group-hover:scale-110 transition-transform" />
                     <span>{item.label}</span>
                   </div>
                   {item.badge && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-600 font-semibold group-hover:bg-amber-100 group-hover:text-amber-800">
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                        isActive ? 'bg-amber-700 text-white' : 'bg-stone-100 text-stone-600 group-hover:bg-amber-100 group-hover:text-amber-800'
+                      }`}
+                    >
                       {item.badge}
                     </span>
                   )}
-                </NavLink>
+                </Link>
               )
             })}
 
@@ -180,7 +174,7 @@ export const ShopkeeperLayout: React.FC = () => {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors"
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
               >
                 <LogOut className="w-4 h-4" />
                 Sign Out
@@ -224,12 +218,17 @@ export const ShopkeeperLayout: React.FC = () => {
               <nav className="mt-4 space-y-1">
                 {navItems.map((item) => {
                   const Icon = item.icon
+                  const isActive = item.hash ? currentHash === item.hash : location.pathname === item.to
                   return (
                     <Link
                       key={item.label}
                       to={item.to}
                       onClick={() => setMobileMenuOpen(false)}
-                      className="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium text-stone-700 hover:bg-amber-50 hover:text-amber-900"
+                      className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium ${
+                        isActive
+                          ? 'bg-amber-600 text-white font-semibold shadow-sm'
+                          : 'text-stone-700 hover:bg-amber-50 hover:text-amber-900'
+                      }`}
                     >
                       <div className="flex items-center gap-3">
                         <Icon className="w-4 h-4 text-amber-700" />

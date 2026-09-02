@@ -1,11 +1,9 @@
 package com.bakery.cottage.controller;
 
-import com.bakery.cottage.dto.CustomCakeRequestDTO;
-import com.bakery.cottage.dto.OrderDTO;
-import com.bakery.cottage.dto.ShopkeeperCustomCakeReviewRequest;
-import com.bakery.cottage.dto.UpdateOrderStatusRequest;
+import com.bakery.cottage.dto.*;
 import com.bakery.cottage.entity.CustomCakeStatus;
 import com.bakery.cottage.entity.OrderStatus;
+import com.bakery.cottage.service.ProductService;
 import com.bakery.cottage.service.ShopkeeperService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -20,15 +18,29 @@ import java.util.List;
 @RestController
 @RequestMapping("/shopkeeper")
 @PreAuthorize("hasRole('SHOPKEEPER') or hasRole('ADMIN')")
-@Tag(name = "Shopkeeper Dashboard Operations", description = "Endpoints for managing bakery kitchen queue, order fulfillment, and reviewing custom cake requests")
+@Tag(name = "Shopkeeper Dashboard Operations", description = "Endpoints for managing bakery kitchen queue, order fulfillment, read-only catalog viewing, and reviewing custom cake requests")
 @SecurityRequirement(name = "bearerAuth")
 public class ShopkeeperController {
 
     private final ShopkeeperService shopkeeperService;
+    private final ProductService productService;
 
-    public ShopkeeperController(ShopkeeperService shopkeeperService) {
+    public ShopkeeperController(
+            ShopkeeperService shopkeeperService,
+            ProductService productService) {
         this.shopkeeperService = shopkeeperService;
+        this.productService = productService;
     }
+
+    @GetMapping("/summary")
+    @Operation(summary = "Get live shopkeeper dashboard business metrics and order statistics")
+    public ResponseEntity<ShopkeeperSummaryDTO> getShopkeeperSummary() {
+        return ResponseEntity.ok(shopkeeperService.getShopkeeperSummary());
+    }
+
+    // ==========================================
+    // ORDER MANAGEMENT APIS
+    // ==========================================
 
     @GetMapping("/orders")
     @Operation(summary = "Fetch active bakery orders", description = "Retrieves orders awaiting baking, packaging, or delivery fulfillment")
@@ -54,6 +66,10 @@ public class ShopkeeperController {
         return ResponseEntity.ok(updated);
     }
 
+    // ==========================================
+    // CUSTOM CAKE MANAGEMENT APIS
+    // ==========================================
+
     @GetMapping("/custom-cakes")
     @Operation(summary = "Retrieve custom cake requests", description = "Fetches customer custom cake inquiries requiring bakery feasibility analysis and quote approval")
     public ResponseEntity<List<CustomCakeRequestDTO>> getCustomCakes(
@@ -76,5 +92,24 @@ public class ShopkeeperController {
             @Valid @RequestBody ShopkeeperCustomCakeReviewRequest request) {
         CustomCakeRequestDTO reviewed = shopkeeperService.reviewCustomCakeRequest(id, request);
         return ResponseEntity.ok(reviewed);
+    }
+
+    // ==========================================
+    // READ-ONLY PRODUCT CATALOG VIEWING FOR SHOPKEEPER
+    // Note: All product CRUD/write operations belong strictly to ADMIN (/admin/products/**)
+    // ==========================================
+
+    @GetMapping("/products")
+    @Operation(summary = "Get products in the catalog for shopkeeper read-only reference")
+    public ResponseEntity<List<ProductDTO>> getProducts(
+            @RequestParam(required = false) String category,
+            @RequestParam(required = false) String search) {
+        return ResponseEntity.ok(productService.getProducts(category, search, null, null, null, null, "newest"));
+    }
+
+    @GetMapping("/products/{id}")
+    @Operation(summary = "Get single product details by ID (read-only)")
+    public ResponseEntity<ProductDTO> getProductById(@PathVariable String id) {
+        return ResponseEntity.ok(productService.getProductById(id));
     }
 }

@@ -1,7 +1,37 @@
-import type { Order, OrderStatus } from '@/features/checkout/types'
-import type { CustomCakeRequest, CustomCakeStatus } from '@/features/customCake/types'
+import type {
+  Order as BaseOrder,
+  OrderStatus,
+  PaymentStatus,
+  PaymentMethodType,
+  DeliveryAddress,
+  OrderItem,
+} from '@/features/checkout/types'
+import type {
+  CustomCakeRequest as BaseCustomCakeRequest,
+  CustomCakeStatus,
+  CakeCategoryType,
+  CakeFlavorType,
+  CakeWeightType,
+  DietaryPreference,
+  DeliveryTimeWindow,
+} from '@/features/customCake/types'
+import type { Product, ProductCategory, CategoryInfo } from '@/features/catalog/types'
 
 export type FeasibilityDecision = 'FEASIBLE' | 'MINOR_ADJUSTMENTS_REQUIRED' | 'NOT_FEASIBLE'
+
+export interface Order extends BaseOrder {
+  kitchenNotes?: string
+  customerName?: string
+  customerEmail?: string
+  customerPhone?: string
+}
+
+export interface CustomCakeRequest extends BaseCustomCakeRequest {
+  customerName?: string
+  customerEmail?: string
+  customerPhone?: string
+  feasibilityDecision?: FeasibilityDecision | string
+}
 
 export interface UpdateOrderStatusPayload {
   status: OrderStatus
@@ -16,13 +46,34 @@ export interface ReviewCustomCakePayload {
   bakeryNotes?: string
 }
 
-export interface ShopkeeperStats {
-  todayTotal: number
-  inPreparation: number
+export interface ShopkeeperSummary {
+  totalProducts: number
+  availableProducts: number
+  totalOrders: number
+  pendingOrders: number
+  preparingOrders: number
+  readyOrders: number
+  outForDeliveryOrders: number
+  completedOrders: number
+  pendingPayments: number
   pendingCustomCakes: number
-  readyForDispatch: number
-  outForDelivery: number
-  completedToday: number
+  totalCustomCakes: number
+  todayOrders: number
 }
 
-export type { Order, OrderStatus, CustomCakeRequest, CustomCakeStatus }
+export type {
+  OrderStatus,
+  PaymentStatus,
+  PaymentMethodType,
+  DeliveryAddress,
+  OrderItem,
+  CustomCakeStatus,
+  CakeCategoryType,
+  CakeFlavorType,
+  CakeWeightType,
+  DietaryPreference,
+  DeliveryTimeWindow,
+  Product,
+  ProductCategory,
+  CategoryInfo,
+}

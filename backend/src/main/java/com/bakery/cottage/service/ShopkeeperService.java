@@ -5,9 +5,11 @@ import com.bakery.cottage.entity.*;
 import com.bakery.cottage.exception.ResourceNotFoundException;
 import com.bakery.cottage.repository.CustomCakeRequestRepository;
 import com.bakery.cottage.repository.OrderRepository;
+import com.bakery.cottage.repository.ProductRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -17,11 +19,74 @@ public class ShopkeeperService {
 
     private final OrderRepository orderRepository;
     private final CustomCakeRequestRepository customCakeRequestRepository;
+    private final ProductRepository productRepository;
 
     public ShopkeeperService(OrderRepository orderRepository,
-                             CustomCakeRequestRepository customCakeRequestRepository) {
+                             CustomCakeRequestRepository customCakeRequestRepository,
+                             ProductRepository productRepository) {
         this.orderRepository = orderRepository;
         this.customCakeRequestRepository = customCakeRequestRepository;
+        this.productRepository = productRepository;
+    }
+
+    @Transactional(readOnly = true)
+    public ShopkeeperSummaryDTO getShopkeeperSummary() {
+        List<Product> products = productRepository.findAllByDeletedAtIsNull();
+        long totalProducts = products.size();
+        long availableProducts = products.stream().filter(Product::isAvailable).count();
+
+        List<Order> orders = orderRepository.findAllByOrderByCreatedAtDesc();
+        long totalOrders = orders.size();
+
+        long pendingOrders = orders.stream()
+                .filter(o -> o.getOrderStatus() == OrderStatus.AWAITING_PAYMENT || o.getOrderStatus() == OrderStatus.CONFIRMED)
+                .count();
+
+        long preparingOrders = orders.stream()
+                .filter(o -> o.getOrderStatus() == OrderStatus.PREPARING)
+                .count();
+
+        long readyOrders = orders.stream()
+                .filter(o -> o.getOrderStatus() == OrderStatus.READY)
+                .count();
+
+        long outForDeliveryOrders = orders.stream()
+                .filter(o -> o.getOrderStatus() == OrderStatus.OUT_FOR_DELIVERY)
+                .count();
+
+        long completedOrders = orders.stream()
+                .filter(o -> o.getOrderStatus() == OrderStatus.DELIVERED || o.getOrderStatus() == OrderStatus.COMPLETED)
+                .count();
+
+        long pendingPayments = orders.stream()
+                .filter(o -> o.getPaymentStatus() == PaymentStatus.PENDING)
+                .count();
+
+        List<CustomCakeRequestEntity> cakes = customCakeRequestRepository.findAllByOrderByCreatedAtDesc();
+        long totalCustomCakes = cakes.size();
+        long pendingCustomCakes = cakes.stream()
+                .filter(c -> c.getStatus() == CustomCakeStatus.PENDING_REVIEW || c.getStatus() == CustomCakeStatus.UNDER_REVIEW)
+                .count();
+
+        LocalDate today = LocalDate.now();
+        long todayOrders = orders.stream()
+                .filter(o -> o.getCreatedAt() != null && o.getCreatedAt().toLocalDate().isEqual(today))
+                .count();
+
+        return ShopkeeperSummaryDTO.builder()
+                .totalProducts(totalProducts)
+                .availableProducts(availableProducts)
+                .totalOrders(totalOrders)
+                .pendingOrders(pendingOrders)
+                .preparingOrders(preparingOrders)
+                .readyOrders(readyOrders)
+                .outForDeliveryOrders(outForDeliveryOrders)
+                .completedOrders(completedOrders)
+                .pendingPayments(pendingPayments)
+                .pendingCustomCakes(pendingCustomCakes)
+                .totalCustomCakes(totalCustomCakes)
+                .todayOrders(todayOrders)
+                .build();
     }
 
     @Transactional(readOnly = true)
