@@ -2,6 +2,8 @@ package com.bakery.cottage.service;
 
 import com.bakery.cottage.dto.DailyRevenueDTO;
 import com.bakery.cottage.dto.DashboardStatsDTO;
+import com.bakery.cottage.entity.OrderStatus;
+import com.bakery.cottage.entity.PaymentStatus;
 import com.bakery.cottage.entity.Role;
 import com.bakery.cottage.repository.OrderRepository;
 import com.bakery.cottage.repository.PaymentRepository;
@@ -43,7 +45,7 @@ public class AdminDashboardService {
         long activeShopkeepers = userRepository.countByRoleAndEnabledTrueAndDeletedAtIsNull(Role.SHOPKEEPER);
         long totalOrders = orderRepository.count();
         long pendingOrders = orderRepository.countByOrderStatusIn(
-                List.of("PENDING", "AWAITING_PAYMENT", "PREPARING", "CONFIRMED")
+                List.of(OrderStatus.CONFIRMED, OrderStatus.PREPARING)
         );
         long pendingPaymentVerifications = paymentRepository.countByStatus("VERIFICATION_REQUIRED");
         long availableProducts = productRepository.countByAvailableTrue();
@@ -53,8 +55,8 @@ public class AdminDashboardService {
         LocalDateTime endOfToday = today.atTime(LocalTime.MAX);
         LocalDateTime startOfMonth = today.withDayOfMonth(1).atStartOfDay();
 
-        BigDecimal todayRevBd = orderRepository.sumGrandTotalByPaymentStatusAndCreatedAtBetween("PAID", startOfToday, endOfToday);
-        BigDecimal monthlyRevBd = orderRepository.sumGrandTotalByPaymentStatusAndCreatedAtBetween("PAID", startOfMonth, endOfToday);
+        BigDecimal todayRevBd = orderRepository.sumGrandTotalByPaymentStatusAndCreatedAtBetween(PaymentStatus.PAID, startOfToday, endOfToday);
+        BigDecimal monthlyRevBd = orderRepository.sumGrandTotalByPaymentStatusAndCreatedAtBetween(PaymentStatus.PAID, startOfMonth, endOfToday);
 
         double todayRevenue = (todayRevBd != null) ? todayRevBd.doubleValue() : 0.0;
         double monthlyRevenue = (monthlyRevBd != null) ? monthlyRevBd.doubleValue() : 0.0;
@@ -69,7 +71,7 @@ public class AdminDashboardService {
             LocalDate date = today.minusDays(i);
             LocalDateTime dayStart = date.atStartOfDay();
             LocalDateTime dayEnd = date.atTime(LocalTime.MAX);
-            BigDecimal dayTotal = orderRepository.sumGrandTotalByPaymentStatusAndCreatedAtBetween("PAID", dayStart, dayEnd);
+            BigDecimal dayTotal = orderRepository.sumGrandTotalByPaymentStatusAndCreatedAtBetween(PaymentStatus.PAID, dayStart, dayEnd);
             double amount = (dayTotal != null) ? dayTotal.doubleValue() : 0.0;
             dayAmounts.add(amount);
             dayLabels.add(date.getDayOfWeek().getDisplayName(TextStyle.SHORT, Locale.ENGLISH));

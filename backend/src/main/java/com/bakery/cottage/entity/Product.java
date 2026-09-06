@@ -96,6 +96,25 @@ public class Product {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @Column(name = "stock_quantity")
+    @Builder.Default
+    private Integer stockQuantity = 50;
+
+    public String getImageUrl() {
+        return image;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.image = imageUrl;
+    }
+
+    public static class ProductBuilder {
+        public ProductBuilder imageUrl(String imageUrl) {
+            this.image = imageUrl;
+            return this;
+        }
+    }
+
     @PrePersist
     protected void onCreate() {
         if (id == null || id.isBlank()) {

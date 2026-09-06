@@ -3,11 +3,14 @@ package com.bakery.cottage.service;
 import com.bakery.cottage.dto.AdminOrderDTO;
 import com.bakery.cottage.dto.AdminOrderItemDTO;
 import com.bakery.cottage.entity.Order;
+import com.bakery.cottage.entity.OrderStatus;
+import com.bakery.cottage.entity.PaymentStatus;
 import com.bakery.cottage.exception.ResourceNotFoundException;
 import com.bakery.cottage.repository.OrderRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -43,8 +46,12 @@ public class AdminOrderService {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + id));
 
-        String oldStatus = order.getOrderStatus();
-        order.setOrderStatus(newStatus);
+        String oldStatus = (order.getOrderStatus() != null) ? order.getOrderStatus().name() : "CONFIRMED";
+        try {
+            order.setOrderStatus(OrderStatus.valueOf(newStatus));
+        } catch (Exception e) {
+            order.setOrderStatus(OrderStatus.CONFIRMED);
+        }
         Order updated = orderRepository.save(order);
 
         auditService.logEvent(
@@ -72,6 +79,10 @@ public class AdminOrderService {
                 .build()).collect(Collectors.toList())
                 : List.of();
 
+        String addressText = (order.getAddressLine() != null && !order.getAddressLine().isBlank())
+                ? order.getAddressLine() + ", " + (order.getAddressCity() != null ? order.getAddressCity() : "")
+                : (order.getAddressFullName() != null ? order.getAddressFullName() : "Bakery Order Address");
+
         return AdminOrderDTO.builder()
                 .id(order.getId())
                 .orderNumber(order.getOrderNumber())
@@ -80,12 +91,12 @@ public class AdminOrderService {
                 .customerEmail(order.getCustomerEmail())
                 .customerPhone(order.getCustomerPhone())
                 .subtotal(order.getSubtotal())
-                .deliveryFee(order.getDeliveryFee())
+                .deliveryFee(BigDecimal.ZERO)
                 .grandTotal(order.getGrandTotal())
-                .orderStatus(order.getOrderStatus())
-                .paymentStatus(order.getPaymentStatus())
+                .orderStatus((order.getOrderStatus() != null) ? order.getOrderStatus().name() : "CONFIRMED")
+                .paymentStatus((order.getPaymentStatus() != null) ? order.getPaymentStatus().name() : "PENDING")
                 .paymentMethod(order.getPaymentMethod())
-                .deliveryAddress(order.getDeliveryAddress())
+                .deliveryAddress(addressText)
                 .preferredDeliveryDate(order.getPreferredDeliveryDate())
                 .preferredDeliveryTime(order.getPreferredDeliveryTime())
                 .items(items)

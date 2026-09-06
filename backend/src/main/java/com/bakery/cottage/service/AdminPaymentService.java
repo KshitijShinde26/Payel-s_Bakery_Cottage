@@ -3,6 +3,8 @@ package com.bakery.cottage.service;
 import com.bakery.cottage.dto.AdminPaymentDTO;
 import com.bakery.cottage.entity.Order;
 import com.bakery.cottage.entity.Payment;
+import com.bakery.cottage.entity.OrderStatus;
+import com.bakery.cottage.entity.PaymentStatus;
 import com.bakery.cottage.exception.ResourceNotFoundException;
 import com.bakery.cottage.repository.OrderRepository;
 import com.bakery.cottage.repository.PaymentRepository;
@@ -59,9 +61,9 @@ public class AdminPaymentService {
         // Update corresponding Order payment status
         if (payment.getOrderId() != null) {
             orderRepository.findById(payment.getOrderId()).ifPresent(order -> {
-                order.setPaymentStatus("PAID");
-                if ("AWAITING_PAYMENT".equals(order.getOrderStatus())) {
-                    order.setOrderStatus("CONFIRMED");
+                order.setPaymentStatus(PaymentStatus.PAID);
+                if (order.getOrderStatus() == OrderStatus.AWAITING_PAYMENT) {
+                    order.setOrderStatus(OrderStatus.CONFIRMED);
                 }
                 orderRepository.save(order);
             });
@@ -89,7 +91,7 @@ public class AdminPaymentService {
 
         if (payment.getOrderId() != null) {
             orderRepository.findById(payment.getOrderId()).ifPresent(order -> {
-                order.setPaymentStatus("FAILED");
+                order.setPaymentStatus(PaymentStatus.PENDING);
                 orderRepository.save(order);
             });
         }

@@ -42,7 +42,7 @@ public class AdminOrderController {
         String adminEmail = (principal != null) ? principal.getName() : "admin@bakery.com";
         AdminOrderDTO updated = adminOrderService.updateOrderStatus(
                 id,
-                request.getOrderStatus(),
+                request.getStatus().name(),
                 adminEmail,
                 servletRequest.getRemoteAddr()
         );

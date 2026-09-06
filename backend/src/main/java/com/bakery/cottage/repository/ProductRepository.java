@@ -25,4 +25,8 @@ public interface ProductRepository extends JpaRepository<Product, String> {
     List<Product> findByBestsellerTrueAndDeletedAtIsNull();
 
     long countByCategoryIgnoreCaseAndDeletedAtIsNull(String category);
+
+    long countByAvailableTrueAndDeletedAtIsNull();
+
+    long countByAvailableTrue();
 }
