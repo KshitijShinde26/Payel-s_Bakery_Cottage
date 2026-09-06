@@ -9,7 +9,6 @@ import {
   ArrowRight,
   ChevronRight,
   Calendar,
-  AlertCircle,
 } from 'lucide-react'
 import type { Order, OrderStatus } from '@/features/checkout/types'
 
