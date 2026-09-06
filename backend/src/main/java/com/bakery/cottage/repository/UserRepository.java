@@ -1,8 +1,11 @@
 package com.bakery.cottage.repository;
 
+import com.bakery.cottage.entity.Role;
 import com.bakery.cottage.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
+
+import java.util.List;
 import java.util.Optional;
 
 @Repository
