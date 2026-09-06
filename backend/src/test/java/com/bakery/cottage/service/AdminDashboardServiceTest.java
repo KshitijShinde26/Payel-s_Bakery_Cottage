@@ -38,7 +38,7 @@ public class AdminDashboardServiceTest {
         when(orderRepository.countByOrderStatusIn(anyList())).thenReturn(8L);
         when(paymentRepository.countByStatus("VERIFICATION_REQUIRED")).thenReturn(2L);
         when(productRepository.countByAvailableTrue()).thenReturn(15L);
-        when(orderRepository.sumGrandTotalByPaymentStatusAndCreatedAtBetween(eq("PAID"), any(LocalDateTime.class), any(LocalDateTime.class)))
+        when(orderRepository.sumGrandTotalByPaymentStatusAndCreatedAtBetween(eq(com.bakery.cottage.entity.PaymentStatus.PAID), any(LocalDateTime.class), any(LocalDateTime.class)))
                 .thenReturn(BigDecimal.valueOf(14850.00));
 
         DashboardStatsDTO stats = adminDashboardService.getDashboardStats();
