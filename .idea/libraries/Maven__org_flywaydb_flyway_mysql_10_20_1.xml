@@ -1,0 +1,14 @@
+<component name="libraryTable">
+  <library name="Maven: org.flywaydb:flyway-mysql:10.20.1" type="java-imported" external-system-id="Maven">
+    <properties groupId="org.flywaydb" artifactId="flyway-mysql" version="10.20.1" baseVersion="10.20.1" />
+    <CLASSES>
+      <root url="jar://$MAVEN_REPOSITORY$/org/flywaydb/flyway-mysql/10.20.1/flyway-mysql-10.20.1.jar!/" />
+    </CLASSES>
+    <JAVADOC>
+      <root url="jar://$MAVEN_REPOSITORY$/org/flywaydb/flyway-mysql/10.20.1/flyway-mysql-10.20.1-javadoc.jar!/" />
+    </JAVADOC>
+    <SOURCES>
+      <root url="jar://$MAVEN_REPOSITORY$/org/flywaydb/flyway-mysql/10.20.1/flyway-mysql-10.20.1-sources.jar!/" />
+    </SOURCES>
+  </library>
+</component>
