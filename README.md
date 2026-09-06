@@ -101,3 +101,4 @@ Customer Enters UPI Transaction ID (Mandatory)
 * **AI Inventory Forecasting:** Predicting ingredient stock needs to prevent wastage.
 * **Loyalty Rewards:** Points-based customer retention program.
 * **Referral System:** Sharing discounts to grow the bakery's local customer base.
+"# Payal-s_Bakery_Cottage" 
