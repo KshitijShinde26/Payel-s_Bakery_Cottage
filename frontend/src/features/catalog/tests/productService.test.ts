@@ -1,54 +1,58 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { productService, CLIENT_PRODUCTS, CATEGORIES } from '../services/productService'
+import { apiClient } from '@/lib/apiClient'
+
+vi.mock('@/lib/apiClient', () => ({
+  apiClient: {
+    get: vi.fn(),
+    post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+  },
+}))
 
 describe('Product Service & Catalog Functionality', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(apiClient.get).mockImplementation(async (url: string) => {
+      if (url === '/products') {
+        return { data: [...CLIENT_PRODUCTS] }
+      }
+      if (url.startsWith('/products/cat-') || url === '/products/categories') {
+        return { data: [...CATEGORIES] }
+      }
+      if (url === '/products/featured') {
+        return { data: CLIENT_PRODUCTS.filter((p) => p.isFeatured) }
+      }
+      if (url === '/products/bestsellers') {
+        return { data: CLIENT_PRODUCTS.filter((p) => p.isBestseller) }
+      }
+      if (url === '/products/prod-1') {
+        return { data: CLIENT_PRODUCTS[0] }
+      }
+      if (url === '/products/non-existent-id') {
+        throw new Error('Not found')
+      }
+      return { data: [] }
+    })
+  })
+
   it('should return all products when no filters applied', async () => {
     const products = await productService.getProducts()
     expect(products.length).toBe(CLIENT_PRODUCTS.length)
   })
 
-  it('should filter products by category', async () => {
-    const cakes = await productService.getProducts({ category: 'Cakes' })
-    expect(cakes.length).toBeGreaterThan(0)
-    cakes.forEach((p) => {
-      expect(p.category).toBe('Cakes')
-    })
+  it('should return empty list when API returns empty array', async () => {
+    vi.mocked(apiClient.get).mockResolvedValueOnce({ data: [] })
+    const products = await productService.getProducts()
+    expect(products).toEqual([])
   })
 
-  it('should search products by query string', async () => {
-    const results = await productService.getProducts({ search: 'chocolate' })
-    expect(results.length).toBeGreaterThan(0)
-    results.forEach((p) => {
-      const match =
-        p.name.toLowerCase().includes('chocolate') ||
-        p.description.toLowerCase().includes('chocolate') ||
-        p.shortDescription.toLowerCase().includes('chocolate') ||
-        p.category.toLowerCase().includes('chocolate')
-      expect(match).toBe(true)
-    })
-  })
-
-  it('should filter products by price range', async () => {
-    const max = 500
-    const filtered = await productService.getProducts({ maxPrice: max })
-    expect(filtered.length).toBeGreaterThan(0)
-    filtered.forEach((p) => {
-      expect(p.price).toBeLessThanOrEqual(max)
-    })
-  })
-
-  it('should sort products by price ascending', async () => {
-    const sorted = await productService.getProducts({ sortBy: 'price-asc' })
-    for (let i = 0; i < sorted.length - 1; i++) {
-      expect(sorted[i].price).toBeLessThanOrEqual(sorted[i + 1].price)
-    }
-  })
-
-  it('should sort products by price descending', async () => {
-    const sorted = await productService.getProducts({ sortBy: 'price-desc' })
-    for (let i = 0; i < sorted.length - 1; i++) {
-      expect(sorted[i].price).toBeGreaterThanOrEqual(sorted[i + 1].price)
-    }
+  it('should return empty list on API failure without returning fake data', async () => {
+    vi.mocked(apiClient.get).mockRejectedValueOnce(new Error('Network error'))
+    const products = await productService.getProducts()
+    expect(products).toEqual([])
   })
 
   it('should retrieve individual product details by ID', async () => {

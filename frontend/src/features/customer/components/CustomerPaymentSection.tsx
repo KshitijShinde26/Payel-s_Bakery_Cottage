@@ -9,6 +9,7 @@ import {
   Send,
   Info,
   ShieldCheck,
+  Eye,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import type { Order } from '@/features/checkout/types'
@@ -29,6 +30,7 @@ export const CustomerPaymentSection: React.FC<CustomerPaymentSectionProps> = ({
   const [selectedOrderId, setSelectedOrderId] = useState<string>('')
   const [utrNumber, setUtrNumber] = useState<string>('')
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
+  const [showQrModal, setShowQrModal] = useState<boolean>(false)
 
   // Orders that are currently awaiting payment or have pending payment status
   const pendingOrders = orders.filter((o) => {
@@ -122,22 +124,57 @@ export const CustomerPaymentSection: React.FC<CustomerPaymentSectionProps> = ({
           </h2>
         </div>
 
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200/70 text-amber-800 text-xs font-semibold">
-          <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
-          <span>Manual Admin Verification</span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowQrModal(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-900 text-xs font-bold transition-colors cursor-pointer"
+          >
+            <QrCode className="w-3.5 h-3.5" />
+            <span>View Bakery QR</span>
+          </button>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200/70 text-amber-800 text-xs font-semibold">
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-700" />
+            <span>Manual Admin Verification</span>
+          </div>
         </div>
       </div>
 
-      {/* Advisory Note */}
-      <div className="rounded-2xl bg-amber-50/70 p-4 border border-amber-200 flex items-start gap-3 text-xs text-stone-700">
-        <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <strong className="text-stone-900 block">How Bakery UPI Payments Work:</strong>
-          <span>
-            1. Scan the bakery UPI QR code in your UPI app (GPay, PhonePe, Paytm, etc.).<br />
-            2. Enter the exact order amount and complete transaction.<br />
-            3. Enter the 12-digit UTR / Reference number below. Admin verifies within kitchen operating hours to start baking!
-          </span>
+      {/* Advisory Note & QR Banner */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+        <div className="md:col-span-8 rounded-2xl bg-amber-50/70 p-4 border border-amber-200 flex items-start gap-3 text-xs text-stone-700">
+          <Info className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <strong className="text-stone-900 block">How Bakery UPI Payments Work:</strong>
+            <span>
+              1. Scan the bakery UPI QR code in your UPI app (GPay, PhonePe, Paytm, etc.).<br />
+              2. Enter the exact order amount and complete transaction.<br />
+              3. Enter the 12-digit UTR / Reference number below. Admin verifies within kitchen operating hours to start baking!
+            </span>
+          </div>
+        </div>
+
+        <div className="md:col-span-4 rounded-2xl bg-amber-50 border border-amber-200 p-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <img
+              src="/images/QR-CODE.jpeg"
+              alt="Bakery QR Thumbnail"
+              className="w-12 h-12 rounded-lg object-contain bg-white border border-amber-200 shadow-2xs cursor-pointer"
+              onClick={() => setShowQrModal(true)}
+            />
+            <div>
+              <span className="text-[11px] font-bold text-stone-900 block">Bakery UPI QR</span>
+              <span className="text-[10px] text-stone-500">Scan via any UPI App</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowQrModal(true)}
+            className="p-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs cursor-pointer"
+            title="View Full QR Code"
+          >
+            <Eye className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
 
@@ -255,6 +292,44 @@ export const CustomerPaymentSection: React.FC<CustomerPaymentSectionProps> = ({
           )}
         </div>
       </div>
+
+      {/* QR Code Modal */}
+      {showQrModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-amber-200 text-center space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-stone-100">
+              <h3 className="font-serif font-bold text-stone-900 text-base">Payal's Bakery Cottage UPI QR</h3>
+              <button
+                type="button"
+                onClick={() => setShowQrModal(false)}
+                className="w-7 h-7 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-700 flex items-center justify-center text-sm font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3 bg-stone-50 rounded-2xl border border-amber-100">
+              <img
+                src="/images/QR-CODE.jpeg"
+                alt="Payal's Bakery Cottage UPI QR"
+                className="w-64 h-auto max-w-full mx-auto rounded-xl shadow-xs object-contain"
+              />
+            </div>
+
+            <p className="text-xs text-stone-600">
+              Scan with GPay, PhonePe, Paytm, BHIM or any UPI application. Enter the exact order total and note the 12-digit UTR.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setShowQrModal(false)}
+              className="w-full py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold cursor-pointer"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

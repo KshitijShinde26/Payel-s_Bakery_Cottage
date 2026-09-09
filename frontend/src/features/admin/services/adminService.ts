@@ -3,6 +3,7 @@ import type { Product } from '@/features/catalog/types'
 import type {
   AdminSummary,
   AdminUser,
+  AdminPayment,
   AuditLog,
   Order,
   OrderStatus,
@@ -76,6 +77,32 @@ export const adminService = {
 
   async getAuditLogs(): Promise<AuditLog[]> {
     const response = await apiClient.get<AuditLog[]>('/admin/audit-logs')
+    return response.data
+  },
+
+  // ==========================================
+  // PAYMENT VERIFICATION APIS
+  // ==========================================
+
+  async getPayments(): Promise<AdminPayment[]> {
+    const response = await apiClient.get<AdminPayment[]>('/admin/payments')
+    return response.data
+  },
+
+  async getPendingPayments(): Promise<AdminPayment[]> {
+    const response = await apiClient.get<AdminPayment[]>('/admin/payments/pending')
+    return response.data
+  },
+
+  async verifyPayment(paymentId: string): Promise<AdminPayment> {
+    const response = await apiClient.post<AdminPayment>(`/admin/payments/${paymentId}/verify`)
+    return response.data
+  },
+
+  async rejectPayment(paymentId: string, reason?: string): Promise<AdminPayment> {
+    const response = await apiClient.post<AdminPayment>(`/admin/payments/${paymentId}/reject`, {
+      reason: reason || 'Payment details could not be verified.',
+    })
     return response.data
   },
 

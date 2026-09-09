@@ -122,9 +122,19 @@ public class CustomCakeController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get custom cake request details by ID")
-    public ResponseEntity<CustomCakeRequestDTO> getRequestById(@PathVariable String id) {
+    public ResponseEntity<CustomCakeRequestDTO> getRequestById(@PathVariable String id, Principal principal) {
+        UserPrincipal userPrincipal = getPrincipal(principal);
         CustomCakeRequestEntity entity = customCakeRequestRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("CustomCakeRequest", "id", id));
+
+        // Enforce customer ownership isolation: Non-staff users can only access their own custom cake requests
+        if (userPrincipal != null) {
+            boolean isStaff = userPrincipal.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_SHOPKEEPER"));
+            if (!isStaff && !entity.getUserId().equals(userPrincipal.getId())) {
+                throw new ResourceNotFoundException("CustomCakeRequest", "id", id);
+            }
+        }
         return ResponseEntity.ok(shopkeeperService.mapToCustomCakeDto(entity));
     }
 }

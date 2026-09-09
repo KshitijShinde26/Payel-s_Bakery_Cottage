@@ -7,6 +7,7 @@ import type { Product, CategoryInfo, ProductCategory } from '@/features/catalog/
 import type {
   AdminSummary,
   AdminUser,
+  AdminPayment,
   AuditLog,
   Order,
   OrderStatus,
@@ -45,6 +46,7 @@ import {
   Trash2,
   Upload,
   Check,
+  Copy,
 } from 'lucide-react'
 
 export const AdminDashboard: React.FC = () => {
@@ -52,7 +54,7 @@ export const AdminDashboard: React.FC = () => {
   const location = useLocation()
 
   // Active Tab
-  type TabType = 'overview' | 'users' | 'orders' | 'custom_cakes' | 'products' | 'categories' | 'audit' | 'settings'
+  type TabType = 'overview' | 'payments' | 'users' | 'orders' | 'custom_cakes' | 'products' | 'categories' | 'audit' | 'settings'
   const [activeTab, setActiveTab] = useState<TabType>('overview')
 
   // Main Data States
@@ -60,6 +62,7 @@ export const AdminDashboard: React.FC = () => {
   const [usersList, setUsersList] = useState<AdminUser[]>([])
   const [ordersList, setOrdersList] = useState<Order[]>([])
   const [cakesList, setCakesList] = useState<CustomCakeRequest[]>([])
+  const [paymentsList, setPaymentsList] = useState<AdminPayment[]>([])
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [productsList, setProductsList] = useState<Product[]>([])
   const [categoriesList, setCategoriesList] = useState<CategoryInfo[]>(CATEGORIES)
@@ -70,6 +73,7 @@ export const AdminDashboard: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [userRoleFilter, setUserRoleFilter] = useState<string>('ALL')
   const [orderStatusFilter, setOrderStatusFilter] = useState<string>('ALL')
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>('ALL')
   const [cakeStatusFilter, setCakeStatusFilter] = useState<string>('ALL')
   const [auditEventFilter, setAuditEventFilter] = useState<string>('ALL')
   const [productCategoryFilter, setProductCategoryFilter] = useState<string>('ALL')
@@ -79,6 +83,11 @@ export const AdminDashboard: React.FC = () => {
   const [selectedCake, setSelectedCake] = useState<CustomCakeRequest | null>(null)
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null)
   const [statusConfirmUser, setStatusConfirmUser] = useState<AdminUser | null>(null)
+
+  // Payment Verification Modal States
+  const [rejectModalPayment, setRejectModalPayment] = useState<AdminPayment | null>(null)
+  const [rejectReason, setRejectReason] = useState<string>('')
+  const [isVerifyingPaymentId, setIsVerifyingPaymentId] = useState<string | null>(null)
 
   // Product Management Modal States
   const [isAddProductOpen, setIsAddProductOpen] = useState<boolean>(false)
@@ -122,7 +131,9 @@ export const AdminDashboard: React.FC = () => {
   // Synchronize hash with active tab
   useEffect(() => {
     const hash = location.hash.replace('#', '').toLowerCase()
-    if (hash === 'users' || hash === 'customers' || hash === 'shopkeepers') {
+    if (hash === 'payments' || hash === 'verifications' || hash === 'upi') {
+      setActiveTab('payments')
+    } else if (hash === 'users' || hash === 'customers' || hash === 'shopkeepers') {
       setActiveTab('users')
     } else if (hash === 'orders' || hash === 'all_orders') {
       setActiveTab('orders')
@@ -144,7 +155,7 @@ export const AdminDashboard: React.FC = () => {
   // Load all admin live data
   const fetchAllAdminData = async () => {
     try {
-      const [summaryRes, usersRes, ordersRes, cakesRes, logsRes, prodRes, catRes] = await Promise.all([
+      const [summaryRes, usersRes, ordersRes, cakesRes, logsRes, prodRes, catRes, paymentsRes] = await Promise.all([
         adminService.getSummary().catch(() => null),
         adminService.getUsers().catch(() => []),
         adminService.getOrders().catch(() => []),
@@ -152,6 +163,7 @@ export const AdminDashboard: React.FC = () => {
         adminService.getAuditLogs().catch(() => []),
         adminService.getAdminProducts().catch(() => productService.getProducts()),
         productService.getCategories().catch(() => CATEGORIES),
+        adminService.getPayments().catch(() => []),
       ])
 
       if (summaryRes) setSummary(summaryRes)
@@ -161,6 +173,7 @@ export const AdminDashboard: React.FC = () => {
       setAuditLogs(logsRes)
       setProductsList(prodRes)
       setCategoriesList(catRes)
+      setPaymentsList(paymentsRes)
     } catch (err) {
       console.error('Failed to load admin data', err)
       toast.error('Failed to sync live admin dashboard.')
@@ -168,6 +181,7 @@ export const AdminDashboard: React.FC = () => {
       setIsRefreshing(false)
     }
   }
+
 
   useEffect(() => {
     document.title = "Central Admin Console | Payal's Bakery Cottage"
@@ -360,6 +374,77 @@ export const AdminDashboard: React.FC = () => {
     }
   }
 
+  // ==========================================
+  // PAYMENT VERIFICATION HANDLERS
+  // ==========================================
+
+  const handleVerifyPayment = async (payment: AdminPayment) => {
+    setIsVerifyingPaymentId(payment.id)
+    try {
+      const updated = await adminService.verifyPayment(payment.id)
+      setPaymentsList((prev) => prev.map((p) => (p.id === payment.id ? updated : p)))
+      setOrdersList((prev) =>
+        prev.map((o) => {
+          if (o.id === payment.orderId || o.orderNumber === payment.orderNumber) {
+            return { ...o, paymentStatus: 'PAID', orderStatus: o.orderStatus === 'AWAITING_PAYMENT' ? 'CONFIRMED' : o.orderStatus }
+          }
+          return o
+        })
+      )
+      toast.success(`Payment of ₹${payment.amount} for Order #${payment.orderNumber || payment.orderId} verified and approved!`)
+      const summaryRes = await adminService.getSummary().catch(() => null)
+      if (summaryRes) setSummary(summaryRes)
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to verify payment.')
+    } finally {
+      setIsVerifyingPaymentId(null)
+    }
+  }
+
+  const handleOpenRejectPayment = (payment: AdminPayment) => {
+    setRejectModalPayment(payment)
+    setRejectReason('Transaction Reference / UTR could not be verified in the bakery account.')
+  }
+
+  const handleConfirmRejectPayment = async () => {
+    if (!rejectModalPayment) return
+    try {
+      const updated = await adminService.rejectPayment(rejectModalPayment.id, rejectReason)
+      setPaymentsList((prev) => prev.map((p) => (p.id === rejectModalPayment.id ? updated : p)))
+      setOrdersList((prev) =>
+        prev.map((o) => {
+          if (o.id === rejectModalPayment.orderId || o.orderNumber === rejectModalPayment.orderNumber) {
+            return { ...o, paymentStatus: 'PENDING' }
+          }
+          return o
+        })
+      )
+      toast.success(`Payment for Order #${rejectModalPayment.orderNumber || rejectModalPayment.orderId} has been rejected.`)
+      setRejectModalPayment(null)
+      setRejectReason('')
+      const summaryRes = await adminService.getSummary().catch(() => null)
+      if (summaryRes) setSummary(summaryRes)
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to reject payment.')
+    }
+  }
+
+  // Filtered Payments
+  const filteredPayments = useMemo(() => {
+    return paymentsList.filter((p) => {
+      const matchesStatus = paymentStatusFilter === 'ALL' || p.status === paymentStatusFilter
+      const q = searchQuery.toLowerCase().trim()
+      const matchesSearch =
+        !q ||
+        p.id.toLowerCase().includes(q) ||
+        p.orderId?.toLowerCase().includes(q) ||
+        p.orderNumber?.toLowerCase().includes(q) ||
+        p.transactionRef?.toLowerCase().includes(q) ||
+        p.userId?.toLowerCase().includes(q)
+      return matchesStatus && matchesSearch
+    })
+  }, [paymentsList, paymentStatusFilter, searchQuery])
+
   // Filtered Users
   const filteredUsers = useMemo(() => {
     return usersList.filter((u) => {
@@ -433,6 +518,10 @@ export const AdminDashboard: React.FC = () => {
     })
   }, [productsList, productCategoryFilter, searchQuery])
 
+  const pendingVerificationsCount = paymentsList.filter(
+    (p) => p.status === 'VERIFICATION_REQUIRED' || p.status === 'PENDING'
+  ).length
+
   return (
     <div className="space-y-8 animate-fadeIn pb-16">
       {/* Executive Hero Banner */}
@@ -478,6 +567,7 @@ export const AdminDashboard: React.FC = () => {
         <div className="flex items-center gap-2 overflow-x-auto pb-1">
           {[
             { id: 'overview' as const, label: 'Executive Overview', icon: LayoutDashboard, hash: '#overview' },
+            { id: 'payments' as const, label: 'Payment Verifications', icon: CreditCard, hash: '#payments', count: pendingVerificationsCount },
             { id: 'products' as const, label: 'Products Master', icon: Boxes, hash: '#products', count: productsList.length },
             { id: 'orders' as const, label: 'Orders Central', icon: ShoppingBag, hash: '#orders', count: ordersList.length },
             { id: 'custom_cakes' as const, label: 'Custom Cakes', icon: Cake, hash: '#custom-cakes', count: summary?.pendingCustomCakes },
@@ -518,6 +608,7 @@ export const AdminDashboard: React.FC = () => {
             )
           })}
         </div>
+
 
         {/* Search Field */}
         <div className="relative max-w-xs w-full">
@@ -593,38 +684,71 @@ export const AdminDashboard: React.FC = () => {
           </div>
 
           {/* User Breakdown & Pipeline Metrics */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
             {[
               {
                 label: 'Registered Customers',
                 value: summary?.totalCustomers ?? usersList.filter((u) => u.role === 'CUSTOMER').length,
                 icon: Users,
                 desc: 'Bakery patrons',
+                onClick: () => {
+                  window.location.hash = '#users'
+                  setActiveTab('users')
+                },
+              },
+              {
+                label: 'Pending Payments',
+                value: pendingVerificationsCount,
+                icon: CreditCard,
+                desc: 'Awaiting UPI verification',
+                highlight: pendingVerificationsCount > 0,
+                onClick: () => {
+                  window.location.hash = '#payments'
+                  setActiveTab('payments')
+                },
               },
               {
                 label: 'Active Shopkeepers',
                 value: summary?.totalShopkeepers ?? usersList.filter((u) => u.role === 'SHOPKEEPER').length,
                 icon: Store,
                 desc: 'Kitchen & store team',
+                onClick: () => {
+                  window.location.hash = '#users'
+                  setActiveTab('users')
+                },
               },
               {
                 label: 'Pending Custom Cakes',
                 value: summary?.pendingCustomCakes ?? 0,
                 icon: Cake,
                 desc: 'Inquiries awaiting quote',
+                onClick: () => {
+                  window.location.hash = '#custom-cakes'
+                  setActiveTab('custom_cakes')
+                },
               },
               {
                 label: 'Completed Orders',
                 value: summary?.completedOrders ?? 0,
                 icon: CheckCircle2,
                 desc: 'Delivered & closed',
+                onClick: () => {
+                  window.location.hash = '#orders'
+                  setActiveTab('orders')
+                },
               },
             ].map((stat) => {
               const Icon = stat.icon
               return (
-                <div key={stat.label} className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs">
+                <div
+                  key={stat.label}
+                  onClick={stat.onClick}
+                  className={`bg-white rounded-2xl p-4 border transition-all cursor-pointer hover:shadow-md ${
+                    stat.highlight ? 'border-amber-400 bg-amber-50/40 ring-2 ring-amber-400/30' : 'border-stone-200 shadow-xs'
+                  }`}
+                >
                   <div className="flex items-center gap-2 text-stone-400 mb-2">
-                    <Icon className="w-4 h-4 text-amber-700" />
+                    <Icon className={`w-4 h-4 ${stat.highlight ? 'text-amber-600' : 'text-amber-700'}`} />
                     <span className="text-xs font-medium text-stone-600 truncate">{stat.label}</span>
                   </div>
                   <p className="text-xl font-bold font-serif text-stone-900">{stat.value}</p>
@@ -715,17 +839,210 @@ export const AdminDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    window.location.hash = '#products'
-                    setActiveTab('products')
+                    window.location.hash = '#payments'
+                    setActiveTab('payments')
                   }}
                   className="w-full text-xs font-semibold text-amber-700 hover:text-amber-800 flex items-center justify-between cursor-pointer"
                 >
-                  <span>Manage Products Master</span>
+                  <span>Review Pending Payments</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB: PAYMENT VERIFICATIONS (AUTHORITATIVE MYSQL WORKFLOW) */}
+      {/* ========================================================================= */}
+      {activeTab === 'payments' && (
+        <div className="space-y-6">
+          {/* Header Action Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-stone-200 shadow-xs">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-serif font-bold text-stone-900">UPI & Online Payment Verifications</h2>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                  {pendingVerificationsCount} Verification Required
+                </span>
+              </div>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Verify customer 12-digit UTR references against bank statements. Approving automatically updates Order and Kitchen pipeline.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto">
+              {[
+                { id: 'ALL', label: 'All Transactions', count: paymentsList.length },
+                { id: 'VERIFICATION_REQUIRED', label: 'Pending Review', count: paymentsList.filter((p) => p.status === 'VERIFICATION_REQUIRED' || p.status === 'PENDING').length },
+                { id: 'PAID', label: 'Verified & Paid', count: paymentsList.filter((p) => p.status === 'PAID').length },
+                { id: 'REJECTED', label: 'Rejected', count: paymentsList.filter((p) => p.status === 'REJECTED').length },
+              ].map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setPaymentStatusFilter(f.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shrink-0 ${
+                    paymentStatusFilter === f.id
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : 'bg-stone-100 text-stone-600 hover:bg-amber-50 hover:text-amber-900'
+                  }`}
+                >
+                  <span>{f.label}</span>
+                  {f.count > 0 && <span className="ml-1.5 text-[10px] opacity-80">({f.count})</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Payments Table / Grid */}
+          {filteredPayments.length > 0 ? (
+            <div className="bg-white rounded-3xl border border-stone-200 shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-stone-50 text-stone-500 uppercase text-[10px] font-bold border-b border-stone-100 tracking-wider">
+                    <tr>
+                      <th className="px-5 py-3.5">Order Info</th>
+                      <th className="px-5 py-3.5">Customer / User</th>
+                      <th className="px-5 py-3.5">Amount</th>
+                      <th className="px-5 py-3.5">12-Digit UTR / Ref</th>
+                      <th className="px-5 py-3.5">Submitted On</th>
+                      <th className="px-5 py-3.5">Status</th>
+                      <th className="px-5 py-3.5 text-right">Verification Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {filteredPayments.map((p) => {
+                      const isPending = p.status === 'VERIFICATION_REQUIRED' || p.status === 'PENDING'
+                      const isPaid = p.status === 'PAID'
+                      const isRejected = p.status === 'REJECTED'
+
+                      return (
+                        <tr key={p.id} className="hover:bg-amber-50/20 transition-colors">
+                          <td className="px-5 py-4">
+                            <div className="font-serif font-bold text-stone-900">
+                              Order #{p.orderNumber || p.orderId}
+                            </div>
+                            <span className="text-[11px] text-stone-400 font-mono">
+                              ID: {p.orderId.slice(0, 8)}...
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <span className="font-medium text-stone-800 block">
+                              {p.userId || 'Customer'}
+                            </span>
+                            <span className="text-[10px] text-stone-400 uppercase tracking-wider">
+                              {p.paymentMethod || 'UPI_QR'}
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <span className="text-sm font-extrabold text-stone-900 font-serif">
+                              ₹{p.amount.toLocaleString('en-IN')}
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-xs font-bold text-stone-900 bg-stone-100 px-2 py-0.5 rounded border border-stone-200">
+                                {p.transactionRef || 'N/A'}
+                              </span>
+                              {p.transactionRef && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(p.transactionRef || '')
+                                    toast.success('UTR copied to clipboard!')
+                                  }}
+                                  className="p-1 text-stone-400 hover:text-stone-700 rounded transition-colors cursor-pointer"
+                                  title="Copy UTR Reference"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4 text-stone-500">
+                            {p.createdAt
+                              ? new Date(p.createdAt).toLocaleDateString('en-IN', {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })
+                              : 'Recent'}
+                          </td>
+
+                          <td className="px-5 py-4">
+                            {isPending && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>Verification Pending</span>
+                              </span>
+                            )}
+                            {isPaid && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Verified & Paid</span>
+                              </span>
+                            )}
+                            {isRejected && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200">
+                                <X className="w-3.5 h-3.5" />
+                                <span>Payment Rejected</span>
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="px-5 py-4 text-right">
+                            {isPending ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  disabled={isVerifyingPaymentId === p.id}
+                                  onClick={() => handleVerifyPayment(p)}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-semibold text-xs transition-colors shadow-2xs cursor-pointer"
+                                >
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>{isVerifyingPaymentId === p.id ? 'Verifying...' : 'Approve Payment'}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenRejectPayment(p)}
+                                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs border border-rose-200 transition-colors cursor-pointer"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                  <span>Reject</span>
+                                </button>
+                              </div>
+                            ) : isPaid ? (
+                              <div className="text-[11px] text-stone-500">
+                                Verified by <strong className="text-stone-700">{p.verifiedBy || 'Admin'}</strong>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-stone-400">Rejected Transaction</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="p-12 text-center bg-white rounded-3xl border border-stone-200 shadow-xs space-y-3">
+              <CreditCard className="w-10 h-10 text-stone-300 mx-auto" />
+              <h3 className="font-serif font-bold text-stone-800 text-base">No Payment Records Found</h3>
+              <p className="text-xs text-stone-500 max-w-sm mx-auto">
+                No customer transactions match the selected filter criteria.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -2083,7 +2400,68 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Payment Rejection Reason Modal */}
+      {rejectModalPayment && (
+        <div className="fixed inset-0 z-50 bg-stone-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-stone-200 animate-fadeIn space-y-4">
+            <div className="flex items-start justify-between border-b border-stone-100 pb-3">
+              <div>
+                <span className="text-xs uppercase font-bold text-rose-600 tracking-wider block">Admin Payment Decision</span>
+                <h3 className="text-lg font-serif font-bold text-stone-900">
+                  Reject Payment for Order #{rejectModalPayment.orderNumber || rejectModalPayment.orderId}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRejectModalPayment(null)}
+                className="p-1 rounded-xl text-stone-400 hover:text-stone-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-rose-50/60 rounded-2xl p-3 border border-rose-200 text-xs text-rose-900 space-y-1">
+              <p><strong>Amount:</strong> ₹{rejectModalPayment.amount.toLocaleString('en-IN')}</p>
+              <p><strong>UTR Reference:</strong> <span className="font-mono">{rejectModalPayment.transactionRef || 'N/A'}</span></p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider">
+                Rejection Reason (Internal & Audit Record) *
+              </label>
+              <textarea
+                rows={3}
+                required
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="e.g. UTR reference not matching bank account records or amount mismatch."
+                className="w-full px-3 py-2 text-xs rounded-xl bg-stone-50 border border-stone-200 text-stone-900 focus:ring-2 focus:ring-rose-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setRejectModalPayment(null)}
+                className="flex-1 py-2.5 rounded-xl bg-stone-100 text-stone-700 text-xs font-semibold hover:bg-stone-200 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!rejectReason.trim()}
+                onClick={handleConfirmRejectPayment}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-xs font-semibold shadow-xs cursor-pointer"
+              >
+                Confirm Rejection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 export default AdminDashboard
+

@@ -393,7 +393,7 @@ export const CATEGORIES: CategoryInfo[] = [
     slug: 'Cakes',
     description: 'Freshly baked 100% eggless celebration cakes, chocolate ganache, fruit cakes, and signature sponges.',
     image: '/images/Product_1.jpeg',
-    itemCount: 6,
+    itemCount: 0,
   },
   {
     id: 'cat-custom',
@@ -401,7 +401,7 @@ export const CATEGORIES: CategoryInfo[] = [
     slug: 'Customized Cakes',
     description: 'Bespoke celebration bakes tailored to your themes, messages, tiers, and flavor choices.',
     image: '/images/Product_10.jpeg',
-    itemCount: 5,
+    itemCount: 0,
   },
   {
     id: 'cat-pastries',
@@ -409,7 +409,7 @@ export const CATEGORIES: CategoryInfo[] = [
     slug: 'Pastries',
     description: 'Individual pastry slices, chocolate truffle brownies, and fruity layered delicacies.',
     image: '/images/Product_8.jpeg',
-    itemCount: 3,
+    itemCount: 0,
   },
   {
     id: 'cat-cupcakes',
@@ -417,7 +417,7 @@ export const CATEGORIES: CategoryInfo[] = [
     slug: 'Cupcakes',
     description: 'Moist single-serve cupcakes topped with floral buttercream rosettes and molten lava cores.',
     image: '/images/Product_16.jpeg',
-    itemCount: 2,
+    itemCount: 0,
   },
   {
     id: 'cat-cookies',
@@ -425,7 +425,7 @@ export const CATEGORIES: CategoryInfo[] = [
     slug: 'Cookies',
     description: 'Handcrafted golden butter cookies, cardamom biscuits, and tea-time crunchies.',
     image: '/images/Product_14.jpeg',
-    itemCount: 1,
+    itemCount: 0,
   },
   {
     id: 'cat-breads',
@@ -433,7 +433,7 @@ export const CATEGORIES: CategoryInfo[] = [
     slug: 'Breads',
     description: 'Slow-fermented artisan sourdough breads, herb focaccia, and fresh cottage loaves.',
     image: '/images/Product_15.jpeg',
-    itemCount: 1,
+    itemCount: 0,
   },
 ]
 
@@ -451,67 +451,14 @@ export const productService = {
           ...(params?.sortBy ? { sortBy: params.sortBy } : {}),
         },
       })
-      if (response.data && response.data.length > 0) {
+      if (Array.isArray(response.data)) {
         return response.data
       }
-    } catch {
-      // Fallback to local memory catalog if API request fails
+      return []
+    } catch (error) {
+      console.warn('Failed to fetch products from backend API:', error)
+      return []
     }
-
-    // Fallback filtering
-    let filtered = [...CLIENT_PRODUCTS]
-
-    if (params?.category && params.category !== 'All') {
-      const target = params.category.toLowerCase().trim()
-      filtered = filtered.filter((p) => p.category.toLowerCase().trim() === target)
-    }
-
-    if (params?.search && params.search.trim()) {
-      const q = params.search.toLowerCase().trim()
-      filtered = filtered.filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          p.category.toLowerCase().includes(q) ||
-          p.description.toLowerCase().includes(q) ||
-          p.shortDescription.toLowerCase().includes(q)
-      )
-    }
-
-    if (params?.minPrice !== undefined) {
-      filtered = filtered.filter((p) => p.price >= params.minPrice!)
-    }
-
-    if (params?.maxPrice !== undefined) {
-      filtered = filtered.filter((p) => p.price <= params.maxPrice!)
-    }
-
-    if (params?.isEggless !== undefined && params.isEggless) {
-      filtered = filtered.filter((p) => p.isEggless)
-    }
-
-    if (params?.isAvailable !== undefined && params.isAvailable) {
-      filtered = filtered.filter((p) => p.isAvailable)
-    }
-
-    if (params?.sortBy) {
-      switch (params.sortBy) {
-        case 'price-asc':
-          filtered.sort((a, b) => a.price - b.price)
-          break
-        case 'price-desc':
-          filtered.sort((a, b) => b.price - a.price)
-          break
-        case 'newest':
-          filtered.sort((a, b) => b.id.localeCompare(a.id))
-          break
-        case 'popular':
-        default:
-          filtered.sort((a, b) => (b.reviewCount || 0) - (a.reviewCount || 0))
-          break
-      }
-    }
-
-    return filtered
   },
 
   async getProductById(id: string): Promise<Product | null> {
@@ -520,21 +467,21 @@ export const productService = {
       if (response.data) {
         return response.data
       }
-    } catch {
-      // Fallback
+      return null
+    } catch (error) {
+      console.warn(`Failed to fetch product ${id} from backend API:`, error)
+      return null
     }
-    const item = CLIENT_PRODUCTS.find((p) => p.id === id)
-    return item || null
   },
 
   async getCategories(): Promise<CategoryInfo[]> {
     try {
       const response = await apiClient.get<CategoryInfo[]>('/products/categories')
-      if (response.data && response.data.length > 0) {
+      if (Array.isArray(response.data) && response.data.length > 0) {
         return response.data
       }
-    } catch {
-      // Fallback
+    } catch (error) {
+      console.warn('Failed to fetch product categories from backend API:', error)
     }
     return CATEGORIES
   },
@@ -542,24 +489,26 @@ export const productService = {
   async getFeaturedProducts(): Promise<Product[]> {
     try {
       const response = await apiClient.get<Product[]>('/products/featured')
-      if (response.data && response.data.length > 0) {
+      if (Array.isArray(response.data)) {
         return response.data
       }
-    } catch {
-      // Fallback
+      return []
+    } catch (error) {
+      console.warn('Failed to fetch featured products from backend API:', error)
+      return []
     }
-    return CLIENT_PRODUCTS.filter((p) => p.isFeatured)
   },
 
   async getBestSellers(): Promise<Product[]> {
     try {
       const response = await apiClient.get<Product[]>('/products/bestsellers')
-      if (response.data && response.data.length > 0) {
+      if (Array.isArray(response.data)) {
         return response.data
       }
-    } catch {
-      // Fallback
+      return []
+    } catch (error) {
+      console.warn('Failed to fetch bestsellers from backend API:', error)
+      return []
     }
-    return CLIENT_PRODUCTS.filter((p) => p.isBestseller)
   },
 }

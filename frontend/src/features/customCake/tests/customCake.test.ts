@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { customCakeService } from '../services/customCakeService'
+import { apiClient } from '@/lib/apiClient'
 import type { CustomCakePayload } from '../types'
 
 describe('Custom Cake Service & Image Validation', () => {
@@ -64,8 +65,25 @@ describe('Custom Cake Service & Image Validation', () => {
       preferredDeliveryTime: 'Evening (05:00 PM – 08:00 PM)',
     }
 
+    const mockResponse = {
+      id: 'cake-req-123',
+      cakeType: 'Anniversary Cake',
+      flavor: 'Red Velvet',
+      weight: '2.0 kg',
+      dietaryPreference: 'Eggless',
+      customMessage: 'Happy 25th Anniversary!',
+      specialInstructions: 'Golden pearl border',
+      referenceImageUrl: 'https://example.com/cake.jpg',
+      preferredDeliveryDate: '2026-08-25',
+      preferredDeliveryTime: 'Evening (05:00 PM – 08:00 PM)',
+      status: 'PENDING_REVIEW',
+      createdAt: '2026-08-01T10:00:00Z',
+    }
+
+    vi.spyOn(apiClient, 'post').mockResolvedValueOnce({ data: mockResponse } as any)
+
     const created = await customCakeService.submitRequest(payload, 'test-customer-123')
-    expect(created.id).toBeDefined()
+    expect(created.id).toBe('cake-req-123')
     expect(created.cakeType).toBe('Anniversary Cake')
     expect(created.flavor).toBe('Red Velvet')
     expect(created.weight).toBe('2.0 kg')

@@ -73,7 +73,7 @@ public class OrderController {
                 .preferredDeliveryTime(request.getPreferredDeliveryTime())
                 .paymentMethod(request.getPaymentMethod() != null ? request.getPaymentMethod() : "UPI_QR")
                 .orderStatus(OrderStatus.CONFIRMED)
-                .paymentStatus("UPI_QR".equalsIgnoreCase(request.getPaymentMethod()) ? PaymentStatus.PAID : PaymentStatus.PENDING)
+                .paymentStatus(PaymentStatus.PENDING)
                 .build();
 
         if (request.getItems() != null) {
@@ -109,10 +109,20 @@ public class OrderController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get order details by ID")
-    public ResponseEntity<OrderDTO> getOrderById(@PathVariable String id) {
+    public ResponseEntity<OrderDTO> getOrderById(@PathVariable String id, Principal principal) {
+        UserPrincipal userPrincipal = getPrincipal(principal);
         Order order = orderRepository.findById(id)
                 .or(() -> orderRepository.findByOrderNumber(id))
                 .orElseThrow(() -> new ResourceNotFoundException("Order", "id", id));
+
+        // Enforce customer ownership isolation: Non-staff users can only access their own orders
+        if (userPrincipal != null) {
+            boolean isStaff = userPrincipal.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_SHOPKEEPER"));
+            if (!isStaff && !order.getUserId().equals(userPrincipal.getId())) {
+                throw new ResourceNotFoundException("Order", "id", id);
+            }
+        }
         return ResponseEntity.ok(shopkeeperService.mapToOrderDto(order));
     }
 }

@@ -2,17 +2,21 @@ import React, { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { orderService } from '@/features/checkout/services/orderService'
+import { customerService } from '@/features/customer/services/customerService'
 import type { Order } from '@/features/checkout/types'
 import { Button } from '@/components/ui/Button'
+import toast from 'react-hot-toast'
 import {
   CheckCircle2,
   Clock,
   MapPin,
   Calendar,
-  CreditCard,
   ChevronRight,
   ShoppingBag,
   ArrowRight,
+  QrCode,
+  Send,
+  ShieldCheck,
 } from 'lucide-react'
 
 export const OrderConfirmationPage: React.FC = () => {
@@ -20,23 +24,59 @@ export const OrderConfirmationPage: React.FC = () => {
   const { user } = useAuth()
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
+  const [utrNumber, setUtrNumber] = useState<string>('')
+  const [isSubmittingUtr, setIsSubmittingUtr] = useState<boolean>(false)
+  const [paymentStatus, setPaymentStatus] = useState<string>('PENDING')
+
+  const loadOrder = async () => {
+    if (!id) return
+    try {
+      const data = await orderService.getOrderById(id, user?.id)
+      setOrder(data)
+      if (data?.paymentStatus) {
+        setPaymentStatus(data.paymentStatus)
+      }
+    } catch (err) {
+      console.error('Failed to load order', err)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    document.title = "Order Details | Payal's Bakery Cottage"
-    const loadOrder = async () => {
-      if (!id) return
-      setLoading(true)
-      try {
-        const data = await orderService.getOrderById(id, user?.id)
-        setOrder(data)
-      } catch (err) {
-        console.error('Failed to load order', err)
-      } finally {
-        setLoading(false)
-      }
-    }
+    document.title = "Order Details & Payment | Payal's Bakery Cottage"
     loadOrder()
   }, [id, user?.id])
+
+  const handleUtrSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!order) return
+
+    const trimmed = utrNumber.trim()
+    if (!trimmed || trimmed.length < 6) {
+      toast.error('Please enter a valid 12-digit UPI UTR / Transaction Reference number.')
+      return
+    }
+
+    setIsSubmittingUtr(true)
+    try {
+      await customerService.submitPayment({
+        orderId: order.id,
+        amount: order.grandTotal,
+        paymentMethod: order.paymentMethod || 'UPI_QR',
+        transactionRef: trimmed,
+      })
+      toast.success('Payment UTR reference submitted successfully! Admin will verify shortly.')
+      setPaymentStatus('VERIFICATION_REQUIRED')
+      setUtrNumber('')
+      loadOrder()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to submit payment reference.'
+      toast.error(msg)
+    } finally {
+      setIsSubmittingUtr(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -64,7 +104,7 @@ export const OrderConfirmationPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-stone-50/50 py-8 sm:py-12">
-      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
         {/* Breadcrumb */}
         <nav aria-label="Breadcrumb" className="mb-6 flex items-center gap-1.5 text-xs text-stone-500">
           <Link to="/" className="hover:text-amber-800 transition-colors">
@@ -83,16 +123,134 @@ export const OrderConfirmationPage: React.FC = () => {
           <div className="w-16 h-16 rounded-3xl bg-emerald-100 text-emerald-700 mx-auto flex items-center justify-center shadow-xs">
             <CheckCircle2 className="w-8 h-8" />
           </div>
-          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-50 text-amber-800 text-xs font-bold uppercase tracking-wider border border-amber-200">
-            <Clock className="w-3.5 h-3.5" /> Awaiting Payment / Bakery Confirmation
-          </span>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 text-xs font-bold uppercase tracking-wider border border-amber-200">
+            {paymentStatus === 'PAID' ? (
+              <>
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-emerald-800">Payment Verified by Bakery</span>
+              </>
+            ) : paymentStatus === 'VERIFICATION_REQUIRED' ? (
+              <>
+                <Clock className="w-3.5 h-3.5 text-amber-700" />
+                <span>Payment Verification Pending</span>
+              </>
+            ) : (
+              <>
+                <Clock className="w-3.5 h-3.5 text-amber-700" />
+                <span>Awaiting Payment / Bakery Confirmation</span>
+              </>
+            )}
+          </div>
           <h1 className="text-2xl sm:text-3xl font-bold font-serif text-stone-900">
             Order Received! #{order.orderNumber}
           </h1>
           <p className="text-xs sm:text-sm text-stone-500 max-w-md mx-auto leading-relaxed">
-            Thank you for ordering with Payal's Bakery Cottage. Your order has been placed and is currently awaiting payment verification.
+            Thank you for ordering with Payal's Bakery Cottage. Your order has been placed and registered in the kitchen queue.
           </p>
         </div>
+
+        {/* UPI QR Code & Payment Action Card */}
+        {order.paymentMethod === 'UPI_QR' && (
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-amber-200 shadow-sm space-y-6 mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-100 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                  <QrCode className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-serif font-bold text-stone-900">
+                    Bakery UPI QR Payment
+                  </h2>
+                  <span className="text-xs text-stone-500">
+                    Scan with GPay, PhonePe, Paytm, or any UPI app
+                  </span>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="text-xs text-stone-500 block">Amount to Pay</span>
+                <span className="text-xl sm:text-2xl font-extrabold text-amber-800 font-serif">
+                  ₹{order.grandTotal.toLocaleString('en-IN')}
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+              {/* QR Image */}
+              <div className="md:col-span-5 flex flex-col items-center justify-center p-4 rounded-2xl bg-stone-50 border border-amber-100 text-center">
+                <img
+                  src="/images/QR-CODE.jpeg"
+                  alt="Bakery UPI QR Code"
+                  className="w-56 h-auto max-w-full rounded-xl shadow-xs border border-stone-200 object-contain bg-white"
+                />
+                <span className="text-[11px] font-bold text-amber-900 mt-2 block">
+                  Payal's Bakery Cottage Official UPI
+                </span>
+                <span className="text-[10px] text-stone-400">
+                  Scan using any UPI App
+                </span>
+              </div>
+
+              {/* Payment Instructions & UTR Form */}
+              <div className="md:col-span-7 space-y-4 text-xs">
+                <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 space-y-2 text-stone-700">
+                  <strong className="text-stone-900 block flex items-center gap-1.5 font-bold">
+                    <ShieldCheck className="w-4 h-4 text-amber-700" />
+                    How to complete your payment:
+                  </strong>
+                  <ol className="list-decimal list-inside space-y-1 text-stone-600 pl-1">
+                    <li>Scan the QR code above using your preferred UPI app.</li>
+                    <li>Pay the exact amount of <strong>₹{order.grandTotal.toLocaleString('en-IN')}</strong>.</li>
+                    <li>Copy the 12-digit UPI UTR / Transaction Reference number from your payment receipt.</li>
+                    <li>Enter the UTR below and submit for bakery verification.</li>
+                  </ol>
+                </div>
+
+                {paymentStatus === 'PAID' ? (
+                  <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-3">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <div>
+                      <strong className="block font-bold">Payment Verified!</strong>
+                      <span>Your payment has been approved by the bakery admin. Kitchen preparation is underway.</span>
+                    </div>
+                  </div>
+                ) : paymentStatus === 'VERIFICATION_REQUIRED' ? (
+                  <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center gap-3">
+                    <Clock className="w-5 h-5 text-amber-700 shrink-0" />
+                    <div>
+                      <strong className="block font-bold">Payment Under Verification</strong>
+                      <span>We received your payment reference. Admin will verify it shortly.</span>
+                    </div>
+                  </div>
+                ) : (
+                  <form onSubmit={handleUtrSubmit} className="space-y-3">
+                    <div>
+                      <label className="font-bold text-stone-800 block mb-1">
+                        12-Digit UPI UTR / Transaction Reference ID <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        maxLength={30}
+                        placeholder="e.g. 423589124501"
+                        value={utrNumber}
+                        onChange={(e) => setUtrNumber(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-amber-200 bg-white text-stone-900 font-mono text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={isSubmittingUtr || !utrNumber.trim()}
+                      className="w-full py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-xs transition-colors cursor-pointer"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      <span>{isSubmittingUtr ? 'Submitting Reference...' : 'Submit Payment Proof'}</span>
+                    </button>
+                  </form>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Order Details Card */}
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-amber-100/80 shadow-xs space-y-6">
@@ -171,15 +329,6 @@ export const OrderConfirmationPage: React.FC = () => {
               <span className="text-2xl font-extrabold text-amber-800 font-serif">
                 ₹{order.grandTotal.toLocaleString('en-IN')}
               </span>
-            </div>
-          </div>
-
-          {/* Payment Notice (Phase 6 demarcation) */}
-          <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-stone-700 flex items-start gap-3">
-            <CreditCard className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-            <div>
-              <strong className="text-stone-900 block mb-0.5">UPI Payment Verification:</strong>
-              Bakery UPI QR Code payment session and verification will be finalized in Phase 6. Your order has been registered in the kitchen queue.
             </div>
           </div>
 

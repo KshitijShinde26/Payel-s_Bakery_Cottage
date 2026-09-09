@@ -50,4 +50,18 @@ export interface AuditLog {
   timestamp: string
 }
 
+export interface AdminPayment {
+  id: string
+  orderId: string
+  orderNumber?: string
+  userId?: string
+  amount: number
+  paymentMethod: string
+  status: 'PENDING' | 'VERIFICATION_REQUIRED' | 'PAID' | 'REJECTED' | 'FAILED' | 'REFUNDED'
+  transactionRef?: string
+  verifiedBy?: string
+  verifiedAt?: string
+  createdAt: string
+}
+
 export type { Order, OrderStatus, CustomCakeRequest, CustomCakeStatus, FeasibilityDecision }

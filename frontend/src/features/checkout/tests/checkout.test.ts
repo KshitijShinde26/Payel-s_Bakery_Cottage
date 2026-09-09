@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { addressService } from '../services/addressService'
 import { orderService } from '../services/orderService'
-import type { DeliveryAddress, CreateOrderPayload } from '../types'
+import type { DeliveryAddress, CreateOrderPayload, Order } from '../types'
 import { CLIENT_PRODUCTS } from '@/features/catalog/services/productService'
+import { apiClient } from '@/lib/apiClient'
 
 describe('Checkout & Delivery Address Validation', () => {
   const validAddress: Omit<DeliveryAddress, 'id'> = {
@@ -66,7 +67,7 @@ describe('Checkout & Delivery Address Validation', () => {
     )
   })
 
-  it('should create order with correct subtotal, PBC- prefix, and AWAITING_PAYMENT status', async () => {
+  it('should create order with correct subtotal, PBC- prefix, and AWAITING_PAYMENT status via backend API', async () => {
     const sampleProduct = CLIENT_PRODUCTS[0]
     const payload: CreateOrderPayload = {
       items: [
@@ -89,8 +90,39 @@ describe('Checkout & Delivery Address Validation', () => {
       paymentMethod: 'UPI_QR',
     }
 
+    const mockResponse: Order = {
+      id: 'order-12345',
+      orderNumber: 'PBC-998877',
+      userId: 'test-customer',
+      items: [
+        {
+          productId: sampleProduct.id,
+          productName: sampleProduct.name,
+          productImage: sampleProduct.image,
+          category: sampleProduct.category,
+          weightOption: '500g',
+          unitPrice: sampleProduct.price,
+          quantity: 2,
+          subtotal: 2 * sampleProduct.price,
+        },
+      ],
+      subtotal: 2 * sampleProduct.price,
+      deliveryChargeText: 'Delivery charges will be calculated by the bakery',
+      grandTotal: 2 * sampleProduct.price,
+      deliveryAddress: { ...validAddress, id: 'addr-1' },
+      preferredDeliveryDate: '2026-08-25',
+      preferredDeliveryTime: 'Evening (05:00 PM – 08:00 PM)',
+      paymentMethod: 'UPI_QR',
+      orderStatus: 'AWAITING_PAYMENT',
+      paymentStatus: 'PENDING',
+      createdAt: '2026-08-24T10:00:00Z',
+      updatedAt: '2026-08-24T10:00:00Z',
+    }
+
+    vi.spyOn(apiClient, 'post').mockResolvedValueOnce({ data: mockResponse })
+
     const order = await orderService.createOrder(payload, 'test-customer')
-    expect(order.id).toBeDefined()
+    expect(order.id).toBe('order-12345')
     expect(order.orderNumber).toMatch(/^PBC-\d+$/)
     expect(order.subtotal).toBe(2 * sampleProduct.price)
     expect(order.grandTotal).toBe(2 * sampleProduct.price)
@@ -98,3 +130,4 @@ describe('Checkout & Delivery Address Validation', () => {
     expect(order.paymentStatus).toBe('PENDING')
   })
 })
+
