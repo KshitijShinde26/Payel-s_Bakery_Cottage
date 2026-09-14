@@ -47,6 +47,9 @@ import {
   Upload,
   Check,
   Copy,
+  Truck,
+  Navigation,
+  Lock,
 } from 'lucide-react'
 
 export const AdminDashboard: React.FC = () => {
@@ -54,7 +57,7 @@ export const AdminDashboard: React.FC = () => {
   const location = useLocation()
 
   // Active Tab
-  type TabType = 'overview' | 'payments' | 'users' | 'orders' | 'custom_cakes' | 'products' | 'categories' | 'audit' | 'settings'
+  type TabType = 'overview' | 'payments' | 'delivery_partners' | 'users' | 'orders' | 'custom_cakes' | 'products' | 'categories' | 'audit' | 'settings'
   const [activeTab, setActiveTab] = useState<TabType>('overview')
 
   // Main Data States
@@ -66,8 +69,32 @@ export const AdminDashboard: React.FC = () => {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [productsList, setProductsList] = useState<Product[]>([])
   const [categoriesList, setCategoriesList] = useState<CategoryInfo[]>(CATEGORIES)
+  const [deliveryPartnersList, setDeliveryPartnersList] = useState<any[]>([])
+  const [deliveryAnalytics, setDeliveryAnalytics] = useState<any | null>(null)
 
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false)
+
+  // Delivery Partner Modals & Form States
+  const [isAddPartnerOpen, setIsAddPartnerOpen] = useState<boolean>(false)
+  const [editingPartner, setEditingPartner] = useState<any | null>(null)
+  const [isSubmittingPartner, setIsSubmittingPartner] = useState<boolean>(false)
+  const initialPartnerForm = {
+    fullName: '',
+    email: '',
+    phoneNumber: '',
+    password: '',
+    serviceArea: '',
+    vehicleType: '',
+    vehicleNumber: '',
+    emergencyContact: '',
+  }
+  const [partnerForm, setPartnerForm] = useState(initialPartnerForm)
+
+  // Order Assignment Modal State
+  const [assignPartnerModalOrder, setAssignPartnerModalOrder] = useState<Order | null>(null)
+  const [selectedDeliveryPartnerId, setSelectedDeliveryPartnerId] = useState<string>('')
+  const [assignDeliveryNotes, setAssignDeliveryNotes] = useState<string>('')
+  const [isSubmittingAssign, setIsSubmittingAssign] = useState<boolean>(false)
 
   // Filters & Search States
   const [searchQuery, setSearchQuery] = useState<string>('')
@@ -133,6 +160,8 @@ export const AdminDashboard: React.FC = () => {
     const hash = location.hash.replace('#', '').toLowerCase()
     if (hash === 'payments' || hash === 'verifications' || hash === 'upi') {
       setActiveTab('payments')
+    } else if (hash === 'delivery-partners' || hash === 'delivery_partners' || hash === 'delivery' || hash === 'partners') {
+      setActiveTab('delivery_partners')
     } else if (hash === 'users' || hash === 'customers' || hash === 'shopkeepers') {
       setActiveTab('users')
     } else if (hash === 'orders' || hash === 'all_orders') {
@@ -155,7 +184,7 @@ export const AdminDashboard: React.FC = () => {
   // Load all admin live data
   const fetchAllAdminData = async () => {
     try {
-      const [summaryRes, usersRes, ordersRes, cakesRes, logsRes, prodRes, catRes, paymentsRes] = await Promise.all([
+      const [summaryRes, usersRes, ordersRes, cakesRes, logsRes, prodRes, catRes, paymentsRes, partnersRes, analyticsRes] = await Promise.all([
         adminService.getSummary().catch(() => null),
         adminService.getUsers().catch(() => []),
         adminService.getOrders().catch(() => []),
@@ -164,6 +193,8 @@ export const AdminDashboard: React.FC = () => {
         adminService.getAdminProducts().catch(() => productService.getProducts()),
         productService.getCategories().catch(() => CATEGORIES),
         adminService.getPayments().catch(() => []),
+        adminService.getDeliveryPartners().catch(() => []),
+        adminService.getDeliveryAnalytics().catch(() => null),
       ])
 
       if (summaryRes) setSummary(summaryRes)
@@ -174,6 +205,8 @@ export const AdminDashboard: React.FC = () => {
       setProductsList(prodRes)
       setCategoriesList(catRes)
       setPaymentsList(paymentsRes)
+      setDeliveryPartnersList(partnersRes)
+      if (analyticsRes) setDeliveryAnalytics(analyticsRes)
     } catch (err) {
       console.error('Failed to load admin data', err)
       toast.error('Failed to sync live admin dashboard.')
@@ -429,6 +462,98 @@ export const AdminDashboard: React.FC = () => {
     }
   }
 
+  // ==========================================
+  // DELIVERY PARTNER HANDLERS
+  // ==========================================
+
+  const handleOpenAddPartner = () => {
+    setPartnerForm(initialPartnerForm)
+    setEditingPartner(null)
+    setIsAddPartnerOpen(true)
+  }
+
+  const handleOpenEditPartner = (partner: any) => {
+    setEditingPartner(partner)
+    setPartnerForm({
+      fullName: partner.fullName || '',
+      email: partner.email || '',
+      phoneNumber: partner.phoneNumber || '',
+      password: '',
+      serviceArea: partner.serviceArea || '',
+      vehicleType: partner.vehicleType || '',
+      vehicleNumber: partner.vehicleNumber || '',
+      emergencyContact: partner.emergencyContact || '',
+    })
+    setIsAddPartnerOpen(true)
+  }
+
+  const handleSavePartner = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSubmittingPartner(true)
+    try {
+      if (editingPartner) {
+        await adminService.updateDeliveryPartner(editingPartner.userId || editingPartner.id, partnerForm)
+        toast.success(`Delivery partner "${partnerForm.fullName}" updated successfully!`)
+      } else {
+        await adminService.createDeliveryPartner(partnerForm)
+        toast.success(`Delivery partner "${partnerForm.fullName}" created successfully!`)
+      }
+      setIsAddPartnerOpen(false)
+      setEditingPartner(null)
+      const [partnersRes, analyticsRes] = await Promise.all([
+        adminService.getDeliveryPartners().catch(() => []),
+        adminService.getDeliveryAnalytics().catch(() => null),
+      ])
+      setDeliveryPartnersList(partnersRes)
+      if (analyticsRes) setDeliveryAnalytics(analyticsRes)
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to save delivery partner.')
+    } finally {
+      setIsSubmittingPartner(false)
+    }
+  }
+
+  const handleTogglePartnerStatus = async (partner: any, enabled: boolean) => {
+    try {
+      await adminService.updateDeliveryPartnerStatus(partner.userId || partner.id, enabled)
+      toast.success(`Delivery partner account ${enabled ? 'activated' : 'deactivated'} successfully!`)
+      const [partnersRes, analyticsRes] = await Promise.all([
+        adminService.getDeliveryPartners().catch(() => []),
+        adminService.getDeliveryAnalytics().catch(() => null),
+      ])
+      setDeliveryPartnersList(partnersRes)
+      if (analyticsRes) setDeliveryAnalytics(analyticsRes)
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to update partner status.')
+    }
+  }
+
+  const handleAssignDeliveryPartner = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!assignPartnerModalOrder || !selectedDeliveryPartnerId) {
+      toast.error('Please select an active delivery partner.')
+      return
+    }
+    setIsSubmittingAssign(true)
+    try {
+      const updatedOrder = await adminService.assignOrderDeliveryPartner(assignPartnerModalOrder.id, {
+        deliveryPartnerId: selectedDeliveryPartnerId,
+        deliveryNotes: assignDeliveryNotes,
+      })
+      toast.success(`Order #${assignPartnerModalOrder.orderNumber} successfully assigned!`)
+      setOrdersList((prev) => prev.map((o) => (o.id === assignPartnerModalOrder.id ? updatedOrder : o)))
+      setAssignPartnerModalOrder(null)
+      setSelectedDeliveryPartnerId('')
+      setAssignDeliveryNotes('')
+      const analyticsRes = await adminService.getDeliveryAnalytics().catch(() => null)
+      if (analyticsRes) setDeliveryAnalytics(analyticsRes)
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to assign order to delivery partner.')
+    } finally {
+      setIsSubmittingAssign(false)
+    }
+  }
+
   // Filtered Payments
   const filteredPayments = useMemo(() => {
     return paymentsList.filter((p) => {
@@ -518,6 +643,21 @@ export const AdminDashboard: React.FC = () => {
     })
   }, [productsList, productCategoryFilter, searchQuery])
 
+  // Filtered Delivery Partners
+  const filteredDeliveryPartners = useMemo(() => {
+    return deliveryPartnersList.filter((p) => {
+      const q = searchQuery.toLowerCase().trim()
+      return (
+        !q ||
+        p.fullName?.toLowerCase().includes(q) ||
+        p.email?.toLowerCase().includes(q) ||
+        p.phoneNumber?.includes(q) ||
+        p.serviceArea?.toLowerCase().includes(q) ||
+        p.vehicleNumber?.toLowerCase().includes(q)
+      )
+    })
+  }, [deliveryPartnersList, searchQuery])
+
   const pendingVerificationsCount = paymentsList.filter(
     (p) => p.status === 'VERIFICATION_REQUIRED' || p.status === 'PENDING'
   ).length
@@ -552,6 +692,14 @@ export const AdminDashboard: React.FC = () => {
             </button>
             <button
               type="button"
+              onClick={handleOpenAddPartner}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-semibold text-xs sm:text-sm transition-all shadow-md cursor-pointer"
+            >
+              <Truck className="w-4 h-4" />
+              <span>Add Delivery Partner</span>
+            </button>
+            <button
+              type="button"
               onClick={handleOpenAddProduct}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs sm:text-sm transition-all shadow-md cursor-pointer"
             >
@@ -568,6 +716,7 @@ export const AdminDashboard: React.FC = () => {
           {[
             { id: 'overview' as const, label: 'Executive Overview', icon: LayoutDashboard, hash: '#overview' },
             { id: 'payments' as const, label: 'Payment Verifications', icon: CreditCard, hash: '#payments', count: pendingVerificationsCount },
+            { id: 'delivery_partners' as const, label: 'Delivery Partners', icon: Truck, hash: '#delivery-partners', count: deliveryPartnersList.length },
             { id: 'products' as const, label: 'Products Master', icon: Boxes, hash: '#products', count: productsList.length },
             { id: 'orders' as const, label: 'Orders Central', icon: ShoppingBag, hash: '#orders', count: ordersList.length },
             { id: 'custom_cakes' as const, label: 'Custom Cakes', icon: Cake, hash: '#custom-cakes', count: summary?.pendingCustomCakes },
@@ -1047,6 +1196,275 @@ export const AdminDashboard: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
+      {/* TAB: DELIVERY PARTNERS FLEET MANAGEMENT */}
+      {/* ========================================================================= */}
+      {activeTab === 'delivery_partners' && (
+        <div className="space-y-6">
+          {/* Real-time Fleet Telemetry Summary */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {[
+              {
+                label: 'Total Fleet',
+                value: deliveryPartnersList.length,
+                desc: 'Registered partners',
+                icon: Users,
+                color: 'text-purple-700',
+                bg: 'bg-purple-50',
+              },
+              {
+                label: 'Active Fleet',
+                value: deliveryPartnersList.filter((p) => p.enabled !== false).length,
+                desc: 'Available for dispatch',
+                icon: UserCheck,
+                color: 'text-emerald-700',
+                bg: 'bg-emerald-50',
+              },
+              {
+                label: 'Unassigned Orders',
+                value: ordersList.filter((o) => !o.deliveryPartnerId && o.orderStatus !== 'DELIVERED' && o.orderStatus !== 'CANCELLED').length,
+                desc: 'Need delivery partner',
+                icon: AlertTriangle,
+                color: 'text-amber-700',
+                bg: 'bg-amber-50',
+              },
+              {
+                label: 'Out for Delivery',
+                value: ordersList.filter((o) => o.orderStatus === 'OUT_FOR_DELIVERY').length,
+                desc: 'In-transit with OTP',
+                icon: Truck,
+                color: 'text-blue-700',
+                bg: 'bg-blue-50',
+              },
+              {
+                label: 'Completed Deliveries',
+                value: deliveryAnalytics?.completedDeliveries ?? ordersList.filter((o) => o.orderStatus === 'DELIVERED').length,
+                desc: 'Verified by OTP',
+                icon: CheckCircle2,
+                color: 'text-teal-700',
+                bg: 'bg-teal-50',
+              },
+              {
+                label: 'Delivery Exceptions',
+                value: ordersList.filter((o) => o.orderStatus === 'DELIVERY_FAILED').length,
+                desc: 'Failed / Rescheduled',
+                icon: X,
+                color: 'text-rose-700',
+                bg: 'bg-rose-50',
+              },
+            ].map((stat) => {
+              const Icon = stat.icon
+              return (
+                <div key={stat.label} className="bg-white rounded-2xl p-4 border border-stone-200 shadow-xs">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider">{stat.label}</span>
+                    <div className={`w-7 h-7 rounded-lg ${stat.bg} ${stat.color} flex items-center justify-center shrink-0`}>
+                      <Icon className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
+                  <p className="text-2xl font-bold font-serif text-stone-900">{stat.value}</p>
+                  <p className="text-[10px] text-stone-400 mt-0.5 truncate">{stat.desc}</p>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Action Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-3xl border border-stone-200 shadow-xs">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base font-serif font-bold text-stone-900">Delivery Partner Fleet Roster</h2>
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-900 border border-purple-300">
+                  {deliveryPartnersList.length} Partners Registered
+                </span>
+              </div>
+              <p className="text-xs text-stone-500 mt-0.5">
+                Manage logistics partners, allocate delivery zones, register vehicle credentials, and toggle account access.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleOpenAddPartner}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-semibold text-xs sm:text-sm shadow-md cursor-pointer transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Provision Delivery Partner</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Delivery Partners Table */}
+          {filteredDeliveryPartners.length > 0 ? (
+            <div className="bg-white rounded-3xl border border-stone-200 shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-stone-50 text-stone-500 uppercase text-[10px] font-bold border-b border-stone-100 tracking-wider">
+                    <tr>
+                      <th className="px-5 py-3.5">Partner Profile</th>
+                      <th className="px-5 py-3.5">Contact Details</th>
+                      <th className="px-5 py-3.5">Service Zone</th>
+                      <th className="px-5 py-3.5">Vehicle & Logistics</th>
+                      <th className="px-5 py-3.5">Live Delivery Load</th>
+                      <th className="px-5 py-3.5">Account Status</th>
+                      <th className="px-5 py-3.5 text-right">Fleet Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {filteredDeliveryPartners.map((partner) => {
+                      const isEnabled = partner.enabled !== false
+                      const activeOrdersCount = ordersList.filter(
+                        (o) =>
+                          o.deliveryPartnerId === (partner.userId || partner.id) &&
+                          o.orderStatus !== 'DELIVERED' &&
+                          o.orderStatus !== 'CANCELLED'
+                      ).length
+
+                      return (
+                        <tr key={partner.userId || partner.id} className="hover:bg-purple-50/20 transition-colors">
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-2xl bg-purple-100 text-purple-900 flex items-center justify-center font-serif font-bold text-sm shrink-0 border border-purple-200">
+                                {partner.fullName?.charAt(0) || 'D'}
+                              </div>
+                              <div>
+                                <span className="font-bold text-stone-900 block text-sm">{partner.fullName}</span>
+                                <span className="text-[11px] text-stone-400 font-mono">
+                                  ID: {(partner.userId || partner.id || '').substring(0, 8)}...
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <div className="space-y-1">
+                              <span className="text-stone-800 flex items-center gap-1.5 font-medium">
+                                <Mail className="w-3 h-3 text-stone-400 shrink-0" />
+                                {partner.email}
+                              </span>
+                              <span className="text-stone-600 flex items-center gap-1.5">
+                                <Phone className="w-3 h-3 text-stone-400 shrink-0" />
+                                {partner.phoneNumber || 'N/A'}
+                              </span>
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold bg-stone-100 text-stone-800 border border-stone-200">
+                              <Navigation className="w-3 h-3 text-stone-500" />
+                              <span>{partner.serviceArea || 'All Zones'}</span>
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <div className="space-y-0.5">
+                              <span className="font-bold text-stone-800 uppercase text-[11px] block">
+                                {partner.vehicleType || 'Two Wheeler'}
+                              </span>
+                              {partner.vehicleNumber ? (
+                                <span className="font-mono text-[11px] bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200 text-stone-700">
+                                  {partner.vehicleNumber}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-stone-400">No vehicle plate</span>
+                              )}
+                              {partner.emergencyContact && (
+                                <span className="text-[10px] text-stone-400 block mt-0.5">
+                                  Emergency: {partner.emergencyContact}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <div className="space-y-1">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                <Clock className="w-3 h-3" />
+                                {activeOrdersCount} In Progress
+                              </span>
+                              <span className="text-[10px] text-stone-500 block">
+                                Completed: <strong>{partner.completedDeliveriesCount || 0}</strong>
+                              </span>
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-4">
+                            <span
+                              className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                                isEnabled
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  : 'bg-rose-50 text-rose-800 border-rose-200'
+                              }`}
+                            >
+                              {isEnabled ? 'Active Fleet' : 'Account Suspended'}
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEditPartner(partner)}
+                                className="p-1.5 rounded-lg bg-stone-100 hover:bg-purple-100 text-stone-700 hover:text-purple-900 transition-colors cursor-pointer"
+                                title="Edit Partner Details"
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePartnerStatus(partner, !isEnabled)}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 cursor-pointer transition-colors ${
+                                  isEnabled
+                                    ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                                }`}
+                              >
+                                {isEnabled ? (
+                                  <>
+                                    <UserX className="w-3.5 h-3.5" />
+                                    <span>Suspend</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <UserCheck className="w-3.5 h-3.5" />
+                                    <span>Activate</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="p-12 text-center bg-white rounded-3xl border border-stone-200 shadow-xs space-y-4">
+              <div className="w-14 h-14 rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center mx-auto border border-purple-200">
+                <Truck className="w-7 h-7" />
+              </div>
+              <div>
+                <h3 className="font-serif font-bold text-stone-900 text-base">No Delivery Partners Provisioned</h3>
+                <p className="text-xs text-stone-500 max-w-md mx-auto mt-1">
+                  Add dedicated delivery drivers to handle delivery dispatches, OTP confirmations, and real-time transit tracking.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenAddPartner}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-semibold text-xs shadow-md cursor-pointer transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Provision First Delivery Partner</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ========================================================================= */}
       {/* TAB 2: PRODUCTS & CATALOGUE MANAGEMENT */}
       {/* ========================================================================= */}
       {activeTab === 'products' && (
@@ -1257,6 +1675,7 @@ export const AdminDashboard: React.FC = () => {
                   <th className="px-5 py-3.5 font-bold">Total</th>
                   <th className="px-5 py-3.5 font-bold">Payment</th>
                   <th className="px-5 py-3.5 font-bold">Status</th>
+                  <th className="px-5 py-3.5 font-bold">Delivery Partner</th>
                   <th className="px-5 py-3.5 font-bold text-right">Actions</th>
                 </tr>
               </thead>
@@ -1314,6 +1733,8 @@ export const AdminDashboard: React.FC = () => {
                             ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                             : order.orderStatus === 'OUT_FOR_DELIVERY'
                             ? 'bg-purple-50 text-purple-800 border-purple-200'
+                            : order.orderStatus === 'DELIVERY_FAILED'
+                            ? 'bg-rose-50 text-rose-800 border-rose-200'
                             : order.orderStatus === 'CANCELLED'
                             ? 'bg-red-50 text-red-800 border-red-200'
                             : 'bg-amber-50 text-amber-800 border-amber-200'
@@ -1323,15 +1744,65 @@ export const AdminDashboard: React.FC = () => {
                       </span>
                     </td>
 
+                    <td className="px-5 py-4">
+                      {order.deliveryPartnerName ? (
+                        <div className="space-y-1">
+                          <span className="font-bold text-purple-900 block text-xs flex items-center gap-1">
+                            <Truck className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            {order.deliveryPartnerName}
+                          </span>
+                          {order.deliveryPartnerPhone && (
+                            <span className="text-[10px] text-stone-500 block">{order.deliveryPartnerPhone}</span>
+                          )}
+                          {order.deliveryOtp && order.orderStatus === 'OUT_FOR_DELIVERY' && (
+                            <span className="text-[10px] font-mono font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-block">
+                              OTP: {order.deliveryOtp}
+                            </span>
+                          )}
+                        </div>
+                      ) : order.orderStatus !== 'DELIVERED' && order.orderStatus !== 'CANCELLED' ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAssignPartnerModalOrder(order)
+                            setSelectedDeliveryPartnerId('')
+                            setAssignDeliveryNotes(order.deliveryNotes || '')
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-700 font-semibold text-[11px] border border-purple-200 transition-colors cursor-pointer"
+                        >
+                          <Truck className="w-3 h-3" />
+                          <span>Assign Partner</span>
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-stone-400">Unassigned</span>
+                      )}
+                    </td>
+
                     <td className="px-5 py-4 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedOrder(order)}
-                        className="px-3 py-1 rounded-lg bg-stone-100 hover:bg-amber-100 text-stone-800 hover:text-amber-900 font-semibold text-xs inline-flex items-center gap-1 cursor-pointer transition-colors"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>Inspect</span>
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        {order.orderStatus !== 'DELIVERED' && order.orderStatus !== 'CANCELLED' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAssignPartnerModalOrder(order)
+                              setSelectedDeliveryPartnerId(order.deliveryPartnerId || '')
+                              setAssignDeliveryNotes(order.deliveryNotes || '')
+                            }}
+                            className="p-1 rounded-lg bg-stone-100 hover:bg-purple-100 text-stone-700 hover:text-purple-900 transition-colors cursor-pointer"
+                            title="Assign / Change Delivery Partner"
+                          >
+                            <Truck className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedOrder(order)}
+                          className="px-3 py-1 rounded-lg bg-stone-100 hover:bg-amber-100 text-stone-800 hover:text-amber-900 font-semibold text-xs inline-flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Inspect</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1517,6 +1988,7 @@ export const AdminDashboard: React.FC = () => {
               {[
                 { id: 'ALL', label: 'All Roles' },
                 { id: 'CUSTOMER', label: 'Customers' },
+                { id: 'DELIVERY_PARTNER', label: 'Delivery Partners' },
                 { id: 'SHOPKEEPER', label: 'Shopkeepers' },
                 { id: 'ADMIN', label: 'Admins' },
               ].map((f) => (
@@ -1587,6 +2059,8 @@ export const AdminDashboard: React.FC = () => {
                               ? 'bg-red-50 text-red-800 border-red-200'
                               : u.role === 'SHOPKEEPER'
                               ? 'bg-amber-50 text-amber-800 border-amber-200'
+                              : u.role === 'DELIVERY_PARTNER'
+                              ? 'bg-purple-50 text-purple-800 border-purple-200'
                               : 'bg-stone-100 text-stone-800 border-stone-200'
                           }`}
                         >
@@ -2191,6 +2665,46 @@ export const AdminDashboard: React.FC = () => {
               </div>
             </div>
 
+            {/* Delivery Partner Assignment In Modal */}
+            <div className="p-3 bg-purple-50/70 rounded-2xl border border-purple-200 text-xs mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <span className="text-[10px] font-bold uppercase text-purple-900 block">Assigned Delivery Partner:</span>
+                {selectedOrder.deliveryPartnerName ? (
+                  <div className="mt-0.5">
+                    <p className="font-bold text-stone-900 flex items-center gap-1.5">
+                      <Truck className="w-3.5 h-3.5 text-purple-700" />
+                      {selectedOrder.deliveryPartnerName} ({selectedOrder.deliveryPartnerPhone || 'No phone'})
+                    </p>
+                    {selectedOrder.deliveryOtp && (
+                      <p className="text-[11px] text-purple-950 font-mono font-bold mt-0.5">
+                        Delivery OTP: <span className="bg-white px-1.5 py-0.5 rounded border border-purple-300">{selectedOrder.deliveryOtp}</span>
+                      </p>
+                    )}
+                    {selectedOrder.deliveryNotes && (
+                      <p className="text-[11px] text-stone-600 italic mt-0.5">Notes: "{selectedOrder.deliveryNotes}"</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-amber-800 font-medium mt-0.5">No delivery partner assigned yet</p>
+                )}
+              </div>
+
+              {selectedOrder.orderStatus !== 'DELIVERED' && selectedOrder.orderStatus !== 'CANCELLED' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAssignPartnerModalOrder(selectedOrder)
+                    setSelectedDeliveryPartnerId(selectedOrder.deliveryPartnerId || '')
+                    setAssignDeliveryNotes(selectedOrder.deliveryNotes || '')
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-semibold text-xs inline-flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer transition-colors"
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>{selectedOrder.deliveryPartnerId ? 'Reassign Partner' : 'Assign Partner'}</span>
+                </button>
+              )}
+            </div>
+
             {/* Itemized Items */}
             <div className="space-y-3 mb-6">
               <span className="text-xs font-bold uppercase text-stone-800 block">Line Items:</span>
@@ -2457,6 +2971,290 @@ export const AdminDashboard: React.FC = () => {
                 Confirm Rejection
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ADD / EDIT DELIVERY PARTNER MODAL */}
+      {isAddPartnerOpen && (
+        <div className="fixed inset-0 z-50 bg-stone-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-stone-200 animate-fadeIn max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between border-b border-stone-100 pb-4 mb-4">
+              <div>
+                <span className="text-xs uppercase font-bold text-purple-700 tracking-wider block">Logistics Personnel</span>
+                <h3 className="text-xl font-serif font-bold text-stone-900">
+                  {editingPartner ? 'Edit Delivery Partner Profile' : 'Provision New Delivery Partner'}
+                </h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  {editingPartner
+                    ? 'Update contact details, operational area, and vehicle assignments.'
+                    : 'Create a secure delivery partner account. The partner will use their email and password to log in.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddPartnerOpen(false)
+                  setEditingPartner(null)
+                }}
+                className="p-1 rounded-xl text-stone-400 hover:text-stone-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePartner} className="space-y-4">
+              {/* Full Name */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Ramesh Kumar"
+                  value={partnerForm.fullName}
+                  onChange={(e) => setPartnerForm({ ...partnerForm, fullName: e.target.value })}
+                  className="w-full px-3.5 py-2 text-xs rounded-xl bg-stone-50 border border-stone-200 text-stone-900 focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              {/* Email & Phone */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                    Email Address *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    disabled={!!editingPartner}
+                    placeholder="partner@bakery.com"
+                    value={partnerForm.email}
+                    onChange={(e) => setPartnerForm({ ...partnerForm, email: e.target.value })}
+                    className="w-full px-3.5 py-2 text-xs rounded-xl bg-stone-50 border border-stone-200 text-stone-900 focus:ring-2 focus:ring-purple-500 disabled:opacity-60"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                    Phone Number *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="10-digit mobile number"
+                    value={partnerForm.phoneNumber}
+                    onChange={(e) => setPartnerForm({ ...partnerForm, phoneNumber: e.target.value })}
+                    className="w-full px-3.5 py-2 text-xs rounded-xl bg-stone-50 border border-stone-200 text-stone-900 focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              {/* Password */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                  {editingPartner ? 'New Password (leave blank to keep current)' : 'Account Password *'}
+                </label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    required={!editingPartner}
+                    placeholder={editingPartner ? '••••••••' : 'Min 6 characters'}
+                    value={partnerForm.password}
+                    onChange={(e) => setPartnerForm({ ...partnerForm, password: e.target.value })}
+                    className="w-full px-3.5 py-2 text-xs rounded-xl bg-stone-50 border border-stone-200 text-stone-900 focus:ring-2 focus:ring-purple-500"
+                  />
+                  <Lock className="w-3.5 h-3.5 text-stone-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                </div>
+              </div>
+
+              {/* Service Area */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                  Primary Delivery Area / Zone
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Viman Nagar, Kalyani Nagar, Koregaon Park"
+                  value={partnerForm.serviceArea}
+                  onChange={(e) => setPartnerForm({ ...partnerForm, serviceArea: e.target.value })}
+                  className="w-full px-3.5 py-2 text-xs rounded-xl bg-stone-50 border border-stone-200 text-stone-900 focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              {/* Vehicle Type & Number */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                    Vehicle Type
+                  </label>
+                  <select
+                    value={partnerForm.vehicleType}
+                    onChange={(e) => setPartnerForm({ ...partnerForm, vehicleType: e.target.value })}
+                    className="w-full px-3.5 py-2 text-xs rounded-xl bg-stone-50 border border-stone-200 text-stone-900 focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">Select vehicle type...</option>
+                    <option value="Motorcycle">Motorcycle</option>
+                    <option value="Scooter">Scooter</option>
+                    <option value="Electric Scooter">Electric Scooter</option>
+                    <option value="Bicycle">Bicycle</option>
+                    <option value="Delivery Van">Delivery Van</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                    Vehicle Plate / Registration
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. MH-12-AB-1234"
+                    value={partnerForm.vehicleNumber}
+                    onChange={(e) => setPartnerForm({ ...partnerForm, vehicleNumber: e.target.value })}
+                    className="w-full px-3.5 py-2 text-xs rounded-xl bg-stone-50 border border-stone-200 text-stone-900 focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              {/* Emergency Contact */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                  Emergency Contact / Next of Kin
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Relative Name - 9876543210"
+                  value={partnerForm.emergencyContact}
+                  onChange={(e) => setPartnerForm({ ...partnerForm, emergencyContact: e.target.value })}
+                  className="w-full px-3.5 py-2 text-xs rounded-xl bg-stone-50 border border-stone-200 text-stone-900 focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddPartnerOpen(false)
+                    setEditingPartner(null)
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-stone-100 text-stone-700 text-xs font-semibold hover:bg-stone-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingPartner}
+                  className="flex-1 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white text-xs font-semibold shadow-xs cursor-pointer inline-flex items-center justify-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isSubmittingPartner ? 'Saving to Database...' : editingPartner ? 'Update Partner' : 'Provision Account'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ASSIGN DELIVERY PARTNER MODAL */}
+      {assignPartnerModalOrder && (
+        <div className="fixed inset-0 z-50 bg-stone-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-8 shadow-2xl border border-stone-200 animate-fadeIn">
+            <div className="flex items-start justify-between border-b border-stone-100 pb-4 mb-4">
+              <div>
+                <span className="text-xs uppercase font-bold text-purple-700 tracking-wider block">Order Dispatch Allocation</span>
+                <h3 className="text-xl font-serif font-bold text-stone-900">
+                  Assign Order #{assignPartnerModalOrder.orderNumber}
+                </h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Allocate this order to a delivery partner for pickup and customer delivery.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAssignPartnerModalOrder(null)}
+                className="p-1 rounded-xl text-stone-400 hover:text-stone-700 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Order Brief Summary */}
+            <div className="bg-purple-50/60 rounded-2xl p-3 border border-purple-100 text-xs text-stone-800 space-y-1 mb-4">
+              <div className="flex justify-between font-medium">
+                <span>Customer: <strong>{assignPartnerModalOrder.deliveryAddress?.fullName || 'Customer'}</strong></span>
+                <span className="font-serif font-bold text-stone-900">₹{assignPartnerModalOrder.grandTotal.toFixed(2)}</span>
+              </div>
+              <p className="text-stone-600 text-[11px]">
+                📍 {assignPartnerModalOrder.deliveryAddress?.addressLine}, {assignPartnerModalOrder.deliveryAddress?.areaLocality}
+              </p>
+              <p className="text-stone-500 text-[10px]">
+                🕒 Preferred Slot: {assignPartnerModalOrder.preferredDeliveryDate} ({assignPartnerModalOrder.preferredDeliveryTime})
+              </p>
+            </div>
+
+            <form onSubmit={handleAssignDeliveryPartner} className="space-y-4">
+              {/* Partner Select */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                  Select Active Delivery Partner *
+                </label>
+                <select
+                  required
+                  value={selectedDeliveryPartnerId}
+                  onChange={(e) => setSelectedDeliveryPartnerId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-xs rounded-xl bg-stone-50 border border-stone-200 text-stone-900 focus:ring-2 focus:ring-purple-500 font-semibold"
+                >
+                  <option value="">-- Choose Delivery Driver --</option>
+                  {deliveryPartnersList
+                    .filter((p) => p.enabled !== false)
+                    .map((p) => (
+                      <option key={p.userId || p.id} value={p.userId || p.id}>
+                        {p.fullName} ({p.phoneNumber || p.email}) • {p.serviceArea || 'General'} • {p.vehicleType || 'Bike'}
+                      </option>
+                    ))}
+                </select>
+                {deliveryPartnersList.filter((p) => p.enabled !== false).length === 0 && (
+                  <p className="text-[11px] text-rose-600 mt-1">
+                    No active delivery partners found. Please add or activate a partner in the Delivery Partners tab first.
+                  </p>
+                )}
+              </div>
+
+              {/* Delivery Notes */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                  Instructions / Handling Notes for Partner
+                </label>
+                <textarea
+                  rows={3}
+                  value={assignDeliveryNotes}
+                  onChange={(e) => setAssignDeliveryNotes(e.target.value)}
+                  placeholder="e.g. Tiered cake in box, please keep flat. Call customer 10 mins before arrival."
+                  className="w-full px-3.5 py-2 text-xs rounded-xl bg-stone-50 border border-stone-200 text-stone-900 focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setAssignPartnerModalOrder(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-stone-100 text-stone-700 text-xs font-semibold hover:bg-stone-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingAssign || !selectedDeliveryPartnerId}
+                  className="flex-1 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 disabled:opacity-50 text-white text-xs font-semibold shadow-xs cursor-pointer inline-flex items-center justify-center gap-2"
+                >
+                  <Truck className="w-4 h-4" />
+                  <span>{isSubmittingAssign ? 'Assigning...' : 'Confirm Assignment'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

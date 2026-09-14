@@ -87,9 +87,12 @@ public class AuthService {
             }
         }
 
-        // Critical Security Rule: Public registration cannot create ADMIN users
+        // Critical Security Rule: Public registration cannot create ADMIN or DELIVERY_PARTNER users
         if (userRole == Role.ADMIN) {
             throw new IllegalArgumentException("Public registration as Administrator is not permitted. Please contact the system administrator.");
+        }
+        if (userRole == Role.DELIVERY_PARTNER) {
+            throw new IllegalArgumentException("Public registration as DELIVERY_PARTNER is not permitted. Please contact the system administrator.");
         }
 
         // Generate Verification OTP

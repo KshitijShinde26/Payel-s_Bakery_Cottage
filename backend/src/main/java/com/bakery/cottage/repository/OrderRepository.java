@@ -38,6 +38,20 @@ public interface OrderRepository extends JpaRepository<Order, String> {
 
     long countByOrderStatusIn(List<OrderStatus> statuses);
 
+    List<Order> findByDeliveryPartnerIdOrderByCreatedAtDesc(String deliveryPartnerId);
+
+    List<Order> findByDeliveryPartnerIdAndOrderStatusOrderByCreatedAtDesc(String deliveryPartnerId, OrderStatus status);
+
+    long countByDeliveryPartnerId(String deliveryPartnerId);
+
+    long countByDeliveryPartnerIdAndOrderStatus(String deliveryPartnerId, OrderStatus status);
+
+    long countByDeliveryPartnerIdAndOrderStatusIn(String deliveryPartnerId, List<OrderStatus> statuses);
+
+    long countByOrderStatus(OrderStatus status);
+
+    Optional<Order> findByIdAndDeliveryPartnerId(String id, String deliveryPartnerId);
+
     @Query("SELECT COALESCE(SUM(o.grandTotal), 0) FROM Order o WHERE o.paymentStatus = :paymentStatus AND o.createdAt BETWEEN :start AND :end")
     BigDecimal sumGrandTotalByPaymentStatusAndCreatedAtBetween(
             @Param("paymentStatus") PaymentStatus paymentStatus,

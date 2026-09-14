@@ -3,6 +3,7 @@ import { MainLayout } from '@/layouts/MainLayout'
 import { CustomerLayout } from '@/layouts/CustomerLayout'
 import { ShopkeeperLayout } from '@/layouts/ShopkeeperLayout'
 import { AdminLayout } from '@/layouts/AdminLayout'
+import { DeliveryPartnerLayout } from '@/layouts/DeliveryPartnerLayout'
 
 import { HomePage } from './HomePage'
 import { ProductCatalogPage } from '@/pages/catalog/ProductCatalogPage'
@@ -25,6 +26,7 @@ import { ProfilePage } from '@/features/profile/pages/ProfilePage'
 import { CustomerDashboard } from '@/pages/customer/CustomerDashboard'
 import { ShopkeeperDashboard } from '@/pages/shopkeeper/ShopkeeperDashboard'
 import { AdminDashboard } from '@/pages/admin/AdminDashboard'
+import { DeliveryPartnerDashboard } from '@/pages/deliveryPartner/DeliveryPartnerDashboard'
 
 import { NotFoundPage } from './NotFoundPage'
 import { PublicRoute, ProtectedRoute, RoleProtectedRoute } from './guards'
@@ -205,6 +207,21 @@ export const router = createBrowserRouter([
       {
         path: 'dashboard',
         element: <AdminDashboard />,
+      },
+    ],
+  },
+  // Dedicated Delivery Partner Dashboard Layout & Routes
+  {
+    path: '/delivery-partner',
+    element: (
+      <RoleProtectedRoute allowedRoles={['DELIVERY_PARTNER']}>
+        <DeliveryPartnerLayout />
+      </RoleProtectedRoute>
+    ),
+    children: [
+      {
+        path: 'dashboard',
+        element: <DeliveryPartnerDashboard />,
       },
     ],
   },

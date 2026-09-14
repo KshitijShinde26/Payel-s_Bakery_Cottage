@@ -96,6 +96,20 @@ public class AuthServiceTest {
     }
 
     @Test
+    void register_DeliveryPartner_RejectedSecurely() {
+        when(userRepository.existsByEmail(anyString())).thenReturn(false);
+        when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                authService.register("Attacker", "partner@example.com", "9876543210", "Password123!", "DELIVERY_PARTNER", "127.0.0.1")
+        );
+
+        assertTrue(exception.getMessage().contains("Public registration as DELIVERY_PARTNER is not permitted"));
+        verify(pendingRegistrationRepository, never()).save(any());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
     void register_InvalidRole_ThrowsException() {
         when(userRepository.existsByEmail(anyString())).thenReturn(false);
         when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);

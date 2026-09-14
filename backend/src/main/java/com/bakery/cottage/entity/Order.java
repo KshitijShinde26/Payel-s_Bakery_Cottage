@@ -92,6 +92,38 @@ public class Order {
     @Column(name = "kitchen_notes", columnDefinition = "TEXT")
     private String kitchenNotes;
 
+    @Column(name = "delivery_partner_id", length = 36)
+    private String deliveryPartnerId;
+
+    @Column(name = "assigned_at")
+    private LocalDateTime assignedAt;
+
+    @Column(name = "out_for_delivery_at")
+    private LocalDateTime outForDeliveryAt;
+
+    @Column(name = "delivered_at")
+    private LocalDateTime deliveredAt;
+
+    @Column(name = "delivery_otp", length = 6)
+    private String deliveryOtp;
+
+    @Column(name = "delivery_otp_expires_at")
+    private LocalDateTime deliveryOtpExpiresAt;
+
+    @Column(name = "delivery_otp_used", nullable = false)
+    @Builder.Default
+    private boolean deliveryOtpUsed = false;
+
+    @Column(name = "delivery_otp_attempts", nullable = false)
+    @Builder.Default
+    private int deliveryOtpAttempts = 0;
+
+    @Column(name = "delivery_failure_reason", length = 255)
+    private String deliveryFailureReason;
+
+    @Column(name = "delivery_notes", columnDefinition = "TEXT")
+    private String deliveryNotes;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

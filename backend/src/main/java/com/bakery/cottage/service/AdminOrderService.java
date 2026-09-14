@@ -19,10 +19,14 @@ public class AdminOrderService {
 
     private final OrderRepository orderRepository;
     private final AuditService auditService;
+    private final com.bakery.cottage.repository.UserRepository userRepository;
 
-    public AdminOrderService(OrderRepository orderRepository, AuditService auditService) {
+    public AdminOrderService(OrderRepository orderRepository,
+                             AuditService auditService,
+                             com.bakery.cottage.repository.UserRepository userRepository) {
         this.orderRepository = orderRepository;
         this.auditService = auditService;
+        this.userRepository = userRepository;
     }
 
     @Transactional(readOnly = true)
@@ -83,6 +87,16 @@ public class AdminOrderService {
                 ? order.getAddressLine() + ", " + (order.getAddressCity() != null ? order.getAddressCity() : "")
                 : (order.getAddressFullName() != null ? order.getAddressFullName() : "Bakery Order Address");
 
+        String partnerName = null;
+        String partnerPhone = null;
+        if (order.getDeliveryPartnerId() != null) {
+            var partnerUser = userRepository.findById(order.getDeliveryPartnerId()).orElse(null);
+            if (partnerUser != null) {
+                partnerName = partnerUser.getFullName();
+                partnerPhone = partnerUser.getPhoneNumber();
+            }
+        }
+
         return AdminOrderDTO.builder()
                 .id(order.getId())
                 .orderNumber(order.getOrderNumber())
@@ -100,6 +114,14 @@ public class AdminOrderService {
                 .preferredDeliveryDate(order.getPreferredDeliveryDate())
                 .preferredDeliveryTime(order.getPreferredDeliveryTime())
                 .items(items)
+                .deliveryPartnerId(order.getDeliveryPartnerId())
+                .deliveryPartnerName(partnerName)
+                .deliveryPartnerPhone(partnerPhone)
+                .assignedAt(order.getAssignedAt())
+                .outForDeliveryAt(order.getOutForDeliveryAt())
+                .deliveredAt(order.getDeliveredAt())
+                .deliveryOtp(order.getDeliveryOtp())
+                .deliveryFailureReason(order.getDeliveryFailureReason())
                 .createdAt(order.getCreatedAt())
                 .build();
     }

@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   ChevronDown,
+  Truck,
 } from 'lucide-react'
 
 export const AdminLayout: React.FC = () => {
@@ -34,6 +35,7 @@ export const AdminLayout: React.FC = () => {
   const navItems = [
     { label: 'Executive Dashboard', icon: LayoutDashboard, to: '/admin/dashboard#overview', badge: 'Live' },
     { label: 'Payment Verifications', icon: CreditCard, to: '/admin/dashboard#payments', badge: 'Live' },
+    { label: 'Delivery Partners', icon: Truck, to: '/admin/dashboard#delivery-partners', badge: 'Live' },
     { label: 'Users & Roles Master', icon: Users, to: '/admin/dashboard#users', badge: 'Live' },
     { label: 'Orders Central', icon: ShoppingBag, to: '/admin/dashboard#orders', badge: 'Live' },
     { label: 'Custom Cake Requests', icon: Cake, to: '/admin/dashboard#custom-cakes', badge: 'Live' },

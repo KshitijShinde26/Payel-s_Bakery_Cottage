@@ -67,6 +67,23 @@ public class CustomerController {
         return ResponseEntity.ok(customerService.getCustomerOrderById(id, userId));
     }
 
+    @GetMapping("/orders/{id}/delivery-otp")
+    @Operation(summary = "Get active Delivery Handover OTP for an OUT_FOR_DELIVERY order")
+    public ResponseEntity<DeliveryOtpResponseDTO> getDeliveryHandoverOtp(@PathVariable String id, Principal principal) {
+        String userId = getUserId(principal);
+        return ResponseEntity.ok(customerService.getDeliveryHandoverOtp(userId, id));
+    }
+
+    @PostMapping("/orders/{id}/regenerate-otp")
+    @Operation(summary = "Regenerate Delivery Handover OTP if expired or requested")
+    public ResponseEntity<DeliveryOtpResponseDTO> regenerateDeliveryOtp(
+            @PathVariable String id,
+            Principal principal,
+            HttpServletRequest servletRequest) {
+        String userId = getUserId(principal);
+        return ResponseEntity.ok(customerService.regenerateDeliveryOtp(userId, id, servletRequest.getRemoteAddr()));
+    }
+
     @GetMapping("/payments")
     @Operation(summary = "Get payment records submitted by current customer")
     public ResponseEntity<List<CustomerPaymentDTO>> getCustomerPayments(Principal principal) {

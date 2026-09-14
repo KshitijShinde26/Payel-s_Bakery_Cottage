@@ -42,3 +42,16 @@ export interface SubmitPaymentPayload {
   transactionRef: string
   receiptImageUrl?: string
 }
+
+export interface DeliveryOtpResponse {
+  orderId: string
+  orderNumber: string
+  deliveryOtp?: string | null
+  expiresAt?: string | null
+  expired: boolean
+  used: boolean
+  attempts: number
+  maxAttempts: number
+  message: string
+}
+

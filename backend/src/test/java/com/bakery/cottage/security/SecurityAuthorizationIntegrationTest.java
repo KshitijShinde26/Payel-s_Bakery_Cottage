@@ -28,7 +28,11 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(controllers = {AdminController.class, ShopkeeperController.class})
+import com.bakery.cottage.controller.DeliveryPartnerController;
+import com.bakery.cottage.service.AdminDeliveryPartnerService;
+import com.bakery.cottage.service.DeliveryPartnerService;
+
+@WebMvcTest(controllers = {AdminController.class, ShopkeeperController.class, DeliveryPartnerController.class})
 @Import({SecurityConfig.class})
 public class SecurityAuthorizationIntegrationTest {
 
@@ -40,6 +44,8 @@ public class SecurityAuthorizationIntegrationTest {
     @MockitoBean private ProductService productService;
     @MockitoBean private CloudinaryService cloudinaryService;
     @MockitoBean private ShopkeeperService shopkeeperService;
+    @MockitoBean private AdminDeliveryPartnerService adminDeliveryPartnerService;
+    @MockitoBean private DeliveryPartnerService deliveryPartnerService;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -128,5 +134,42 @@ public class SecurityAuthorizationIntegrationTest {
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Cake\",\"category\":\"Cakes\",\"price\":500,\"description\":\"Desc\"}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(username = "partner@example.com", roles = {"DELIVERY_PARTNER"})
+    void deliveryPartnerRole_AccessAdminEndpoint_Returns403Forbidden() throws Exception {
+        mockMvc.perform(get("/admin/summary"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(username = "partner@example.com", roles = {"DELIVERY_PARTNER"})
+    void deliveryPartnerRole_AccessShopkeeperEndpoint_Returns403Forbidden() throws Exception {
+        mockMvc.perform(get("/shopkeeper/orders"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
+    void customerRole_AccessDeliveryPartnerEndpoint_Returns403Forbidden() throws Exception {
+        mockMvc.perform(get("/delivery-partner/dashboard"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(username = "shopkeeper@example.com", roles = {"SHOPKEEPER"})
+    void shopkeeperRole_AccessDeliveryPartnerEndpoint_Returns403Forbidden() throws Exception {
+        mockMvc.perform(get("/delivery-partner/dashboard"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(username = "partner@example.com", roles = {"DELIVERY_PARTNER"})
+    void deliveryPartnerRole_AccessDeliveryPartnerEndpoint_Returns200Ok() throws Exception {
+        when(deliveryPartnerService.getDashboardSummary(any())).thenReturn(new com.bakery.cottage.dto.DeliveryPartnerDashboardSummaryDTO());
+
+        mockMvc.perform(get("/delivery-partner/dashboard"))
+                .andExpect(status().isOk());
     }
 }

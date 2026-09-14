@@ -2,10 +2,11 @@ export const UserRole = {
   CUSTOMER: 'CUSTOMER',
   SHOPKEEPER: 'SHOPKEEPER',
   ADMIN: 'ADMIN',
+  DELIVERY_PARTNER: 'DELIVERY_PARTNER',
 } as const
 
 export type UserRoleType = (typeof UserRole)[keyof typeof UserRole]
-export type RoleType = 'CUSTOMER' | 'SHOPKEEPER' | 'ADMIN'
+export type RoleType = 'CUSTOMER' | 'SHOPKEEPER' | 'ADMIN' | 'DELIVERY_PARTNER'
 
 export interface User {
   id: string

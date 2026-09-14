@@ -50,6 +50,8 @@ const getOrderStatusBadge = (status: OrderStatus) => {
     case 'CONFIRMED':
     case 'PAYMENT_VERIFIED':
       return { label: 'Order Confirmed', className: 'bg-amber-100 text-amber-800 border-amber-200', icon: Clock }
+    case 'DELIVERY_FAILED':
+      return { label: 'Delivery Exception', className: 'bg-rose-100 text-rose-800 border-rose-200', icon: X }
     case 'CANCELLED':
       return { label: 'Cancelled', className: 'bg-red-100 text-red-800 border-red-200', icon: X }
     case 'AWAITING_PAYMENT':
@@ -1322,6 +1324,31 @@ export const ShopkeeperDashboard: React.FC = () => {
                     </p>
                   )}
                 </div>
+              </div>
+
+              {/* Delivery Logistics Status */}
+              <div className="bg-purple-50/70 p-3.5 rounded-xl border border-purple-200 text-xs">
+                <span className="font-bold text-purple-900 uppercase tracking-wider text-[10px] block mb-1">
+                  Delivery Logistics & Courier
+                </span>
+                {selectedOrder.deliveryPartnerName ? (
+                  <div className="space-y-1">
+                    <p className="font-bold text-stone-900 flex items-center gap-1.5">
+                      <Truck className="w-3.5 h-3.5 text-purple-700" />
+                      Assigned Driver: {selectedOrder.deliveryPartnerName} ({selectedOrder.deliveryPartnerPhone || 'No phone'})
+                    </p>
+                    {selectedOrder.deliveryOtp && (
+                      <p className="text-[11px] text-purple-950 font-mono font-bold">
+                        Customer Delivery OTP: <span className="bg-white px-1.5 py-0.5 rounded border border-purple-300">{selectedOrder.deliveryOtp}</span>
+                      </p>
+                    )}
+                    {selectedOrder.deliveryNotes && (
+                      <p className="text-[11px] text-stone-600 italic">Handling Notes: "{selectedOrder.deliveryNotes}"</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-amber-800 font-medium">No delivery partner assigned yet (Handled via Admin Console)</p>
+                )}
               </div>
 
               {/* Items List */}

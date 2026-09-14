@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { orderService } from '@/features/checkout/services/orderService'
 import { customerService } from '@/features/customer/services/customerService'
+import { DeliveryHandoverOtpCard } from '@/features/customer/components/DeliveryHandoverOtpCard'
 import type { Order } from '@/features/checkout/types'
 import { Button } from '@/components/ui/Button'
 import toast from 'react-hot-toast'
@@ -17,6 +18,8 @@ import {
   QrCode,
   Send,
   ShieldCheck,
+  Truck,
+  Phone,
 } from 'lucide-react'
 
 export const OrderConfirmationPage: React.FC = () => {
@@ -148,6 +151,42 @@ export const OrderConfirmationPage: React.FC = () => {
             Thank you for ordering with Payal's Bakery Cottage. Your order has been placed and registered in the kitchen queue.
           </p>
         </div>
+
+        {/* Delivery Handover OTP Card / Delivered Status */}
+        <div className="mb-6">
+          <DeliveryHandoverOtpCard
+            orderId={order.id}
+            orderNumber={order.orderNumber}
+            orderStatus={order.orderStatus}
+            initialOtp={order.deliveryOtp}
+            deliveredAt={order.deliveredAt}
+            deliveryPartnerName={order.deliveryPartnerName}
+          />
+        </div>
+
+        {/* Assigned Partner Info (When Confirmed / Preparing / Ready) */}
+        {order.deliveryPartnerName && order.orderStatus !== 'OUT_FOR_DELIVERY' && order.orderStatus !== 'DELIVERED' && order.orderStatus !== 'COMPLETED' && (
+          <div className="bg-purple-50 rounded-2xl p-4 border border-purple-200 mb-6 flex items-center justify-between gap-3 text-xs text-purple-900">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center shrink-0">
+                <Truck className="w-4 h-4" />
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 block">Assigned Delivery Partner</span>
+                <p className="font-bold text-stone-900">{order.deliveryPartnerName}</p>
+              </div>
+            </div>
+            {order.deliveryPartnerPhone && (
+              <a
+                href={`tel:${order.deliveryPartnerPhone}`}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white text-purple-800 border border-purple-200 font-semibold hover:bg-purple-100 transition-colors"
+              >
+                <Phone className="w-3.5 h-3.5" />
+                <span>Call Driver</span>
+              </a>
+            )}
+          </div>
+        )}
 
         {/* UPI QR Code & Payment Action Card */}
         {order.paymentMethod === 'UPI_QR' && (

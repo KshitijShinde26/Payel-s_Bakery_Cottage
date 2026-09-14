@@ -158,4 +158,45 @@ export const adminService = {
     })
     return response.data.imageUrl
   },
+
+  // ==========================================
+  // DELIVERY PARTNER APIS
+  // ==========================================
+
+  async getDeliveryPartners(): Promise<any[]> {
+    const response = await apiClient.get<any[]>('/admin/delivery-partners')
+    return response.data
+  },
+
+  async getDeliveryPartnerById(id: string): Promise<any> {
+    const response = await apiClient.get<any>(`/admin/delivery-partners/${id}`)
+    return response.data
+  },
+
+  async createDeliveryPartner(payload: any): Promise<any> {
+    const response = await apiClient.post<any>('/admin/delivery-partners', payload)
+    return response.data
+  },
+
+  async updateDeliveryPartner(id: string, payload: any): Promise<any> {
+    const response = await apiClient.put<any>(`/admin/delivery-partners/${id}`, payload)
+    return response.data
+  },
+
+  async updateDeliveryPartnerStatus(id: string, enabled: boolean): Promise<any> {
+    const response = await apiClient.patch<any>(`/admin/delivery-partners/${id}/status`, null, {
+      params: { enabled },
+    })
+    return response.data
+  },
+
+  async assignOrderDeliveryPartner(orderId: string, payload: { deliveryPartnerId: string; deliveryNotes?: string }): Promise<any> {
+    const response = await apiClient.post<any>(`/admin/orders/${orderId}/assign-delivery-partner`, payload)
+    return response.data
+  },
+
+  async getDeliveryAnalytics(): Promise<any> {
+    const response = await apiClient.get<any>('/admin/delivery-partners/analytics')
+    return response.data
+  },
 }

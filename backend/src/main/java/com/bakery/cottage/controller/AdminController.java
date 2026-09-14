@@ -34,14 +34,17 @@ public class AdminController {
     private final AdminService adminService;
     private final ProductService productService;
     private final CloudinaryService cloudinaryService;
+    private final com.bakery.cottage.service.AdminDeliveryPartnerService adminDeliveryPartnerService;
 
     public AdminController(
             AdminService adminService,
             ProductService productService,
-            CloudinaryService cloudinaryService) {
+            CloudinaryService cloudinaryService,
+            com.bakery.cottage.service.AdminDeliveryPartnerService adminDeliveryPartnerService) {
         this.adminService = adminService;
         this.productService = productService;
         this.cloudinaryService = cloudinaryService;
+        this.adminDeliveryPartnerService = adminDeliveryPartnerService;
     }
 
     @GetMapping("/summary")
@@ -184,5 +187,74 @@ public class AdminController {
         String adminEmail = principal != null ? principal.getName() : "admin";
         productService.deleteProduct(id, adminEmail, servletRequest.getRemoteAddr());
         return ResponseEntity.ok(Map.of("message", "Product safely deleted from catalog."));
+    }
+
+    // ==========================================
+    // DELIVERY PARTNER MANAGEMENT APIS
+    // ==========================================
+
+    @GetMapping("/delivery-partners")
+    @Operation(summary = "Get all registered delivery partners with active and completed delivery counts")
+    public ResponseEntity<List<DeliveryPartnerDTO>> getAllDeliveryPartners() {
+        return ResponseEntity.ok(adminDeliveryPartnerService.getAllDeliveryPartners());
+    }
+
+    @PostMapping("/delivery-partners")
+    @Operation(summary = "Add a new delivery partner with temporary password credentials")
+    public ResponseEntity<DeliveryPartnerDTO> createDeliveryPartner(
+            @Valid @RequestBody CreateDeliveryPartnerRequest request,
+            Principal principal,
+            HttpServletRequest servletRequest) {
+        String adminEmail = principal != null ? principal.getName() : "admin";
+        DeliveryPartnerDTO created = adminDeliveryPartnerService.createDeliveryPartner(request, adminEmail, servletRequest.getRemoteAddr());
+        return ResponseEntity.ok(created);
+    }
+
+    @GetMapping("/delivery-partners/{id}")
+    @Operation(summary = "Get single delivery partner details by ID")
+    public ResponseEntity<DeliveryPartnerDTO> getDeliveryPartnerById(@PathVariable String id) {
+        return ResponseEntity.ok(adminDeliveryPartnerService.getDeliveryPartnerById(id));
+    }
+
+    @PutMapping("/delivery-partners/{id}")
+    @Operation(summary = "Update delivery partner details, vehicle info, and service area")
+    public ResponseEntity<DeliveryPartnerDTO> updateDeliveryPartner(
+            @PathVariable String id,
+            @Valid @RequestBody UpdateDeliveryPartnerRequest request,
+            Principal principal,
+            HttpServletRequest servletRequest) {
+        String adminEmail = principal != null ? principal.getName() : "admin";
+        DeliveryPartnerDTO updated = adminDeliveryPartnerService.updateDeliveryPartner(id, request, adminEmail, servletRequest.getRemoteAddr());
+        return ResponseEntity.ok(updated);
+    }
+
+    @PatchMapping("/delivery-partners/{id}/status")
+    @Operation(summary = "Activate or deactivate a delivery partner account")
+    public ResponseEntity<DeliveryPartnerDTO> updateDeliveryPartnerStatus(
+            @PathVariable String id,
+            @RequestParam boolean enabled,
+            Principal principal,
+            HttpServletRequest servletRequest) {
+        String adminEmail = principal != null ? principal.getName() : "admin";
+        DeliveryPartnerDTO updated = adminDeliveryPartnerService.updatePartnerStatus(id, enabled, adminEmail, servletRequest.getRemoteAddr());
+        return ResponseEntity.ok(updated);
+    }
+
+    @PostMapping("/orders/{orderId}/assign-delivery-partner")
+    @Operation(summary = "Assign or reassign an order to an active delivery partner")
+    public ResponseEntity<OrderDTO> assignDeliveryPartner(
+            @PathVariable String orderId,
+            @Valid @RequestBody AssignDeliveryPartnerRequest request,
+            Principal principal,
+            HttpServletRequest servletRequest) {
+        String adminEmail = principal != null ? principal.getName() : "admin";
+        OrderDTO updated = adminDeliveryPartnerService.assignOrderToDeliveryPartner(orderId, request, adminEmail, servletRequest.getRemoteAddr());
+        return ResponseEntity.ok(updated);
+    }
+
+    @GetMapping("/delivery-partners/analytics")
+    @Operation(summary = "Get live platform delivery operations analytics and counts")
+    public ResponseEntity<AdminDeliveryAnalyticsDTO> getDeliveryAnalytics() {
+        return ResponseEntity.ok(adminDeliveryPartnerService.getDeliveryAnalytics());
     }
 }

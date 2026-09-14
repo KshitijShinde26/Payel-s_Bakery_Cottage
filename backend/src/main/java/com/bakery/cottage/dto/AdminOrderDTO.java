@@ -29,5 +29,13 @@ public class AdminOrderDTO {
     private String preferredDeliveryDate;
     private String preferredDeliveryTime;
     private List<AdminOrderItemDTO> items;
+    private String deliveryPartnerId;
+    private String deliveryPartnerName;
+    private String deliveryPartnerPhone;
+    private LocalDateTime assignedAt;
+    private LocalDateTime outForDeliveryAt;
+    private LocalDateTime deliveredAt;
+    private String deliveryOtp;
+    private String deliveryFailureReason;
     private LocalDateTime createdAt;
 }

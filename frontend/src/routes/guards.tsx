@@ -55,6 +55,8 @@ export const RoleProtectedRoute: React.FC<{
         return <Navigate to="/admin/dashboard" replace />
       case 'SHOPKEEPER':
         return <Navigate to="/shopkeeper/dashboard" replace />
+      case 'DELIVERY_PARTNER':
+        return <Navigate to="/delivery-partner/dashboard" replace />
       case 'CUSTOMER':
         return <Navigate to="/customer/dashboard" replace />
       default:
@@ -83,7 +85,10 @@ export const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children 
       if (user.role === 'SHOPKEEPER' && from.startsWith('/shopkeeper')) {
         return <Navigate to={from} replace />
       }
-      if (user.role === 'CUSTOMER' && !from.startsWith('/admin') && !from.startsWith('/shopkeeper')) {
+      if (user.role === 'DELIVERY_PARTNER' && from.startsWith('/delivery-partner')) {
+        return <Navigate to={from} replace />
+      }
+      if (user.role === 'CUSTOMER' && !from.startsWith('/admin') && !from.startsWith('/shopkeeper') && !from.startsWith('/delivery-partner')) {
         return <Navigate to={from} replace />
       }
     }
@@ -93,6 +98,8 @@ export const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children 
         return <Navigate to="/admin/dashboard" replace />
       case 'SHOPKEEPER':
         return <Navigate to="/shopkeeper/dashboard" replace />
+      case 'DELIVERY_PARTNER':
+        return <Navigate to="/delivery-partner/dashboard" replace />
       case 'CUSTOMER':
         return <Navigate to="/customer/dashboard" replace />
       default:

@@ -32,6 +32,15 @@ public class OrderDTO {
     private OrderStatus orderStatus;
     private PaymentStatus paymentStatus;
     private String kitchenNotes;
+    private String deliveryPartnerId;
+    private String deliveryPartnerName;
+    private String deliveryPartnerPhone;
+    private LocalDateTime assignedAt;
+    private LocalDateTime outForDeliveryAt;
+    private LocalDateTime deliveredAt;
+    private String deliveryOtp;
+    private String deliveryFailureReason;
+    private String deliveryNotes;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

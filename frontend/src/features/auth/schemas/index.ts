@@ -13,7 +13,7 @@ export const loginSchema = z.object({
     .min(1, 'Password is required')
     .min(8, 'Password must be at least 8 characters'),
   rememberMe: z.boolean().optional(),
-  role: z.enum(['CUSTOMER', 'SHOPKEEPER', 'ADMIN'], {
+  role: z.enum(['CUSTOMER', 'SHOPKEEPER', 'ADMIN', 'DELIVERY_PARTNER'], {
     message: 'Please select your role',
   }),
 })

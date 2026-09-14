@@ -30,6 +30,7 @@ export type OrderStatus =
   | 'OUT_FOR_DELIVERY'
   | 'DELIVERED'
   | 'COMPLETED'
+  | 'DELIVERY_FAILED'
   | 'CANCELLED'
 
 export type PaymentStatus =
@@ -64,6 +65,15 @@ export interface Order {
   paymentMethod: PaymentMethodType
   orderStatus: OrderStatus
   paymentStatus: PaymentStatus
+  deliveryPartnerId?: string
+  deliveryPartnerName?: string
+  deliveryPartnerPhone?: string
+  assignedAt?: string
+  outForDeliveryAt?: string
+  deliveredAt?: string
+  deliveryOtp?: string
+  deliveryFailureReason?: string
+  deliveryNotes?: string
   createdAt: string
   updatedAt: string
 }

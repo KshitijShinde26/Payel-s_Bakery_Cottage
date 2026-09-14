@@ -163,6 +163,97 @@ public class CustomerService {
         return mapPaymentToDto(saved);
     }
 
+    @Transactional
+    public DeliveryOtpResponseDTO getDeliveryHandoverOtp(String userId, String orderId) {
+        Order order = orderRepository.findByIdAndUserId(orderId, userId)
+                .or(() -> orderRepository.findByOrderNumberAndUserId(orderId, userId))
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found or not authorized for this customer"));
+
+        if (order.getOrderStatus() == OrderStatus.DELIVERED || order.getOrderStatus() == OrderStatus.COMPLETED) {
+            return DeliveryOtpResponseDTO.builder()
+                    .orderId(order.getId())
+                    .orderNumber(order.getOrderNumber())
+                    .deliveryOtp(null)
+                    .expiresAt(order.getDeliveryOtpExpiresAt())
+                    .expired(false)
+                    .used(true)
+                    .attempts(order.getDeliveryOtpAttempts())
+                    .maxAttempts(5)
+                    .message("Order has already been delivered successfully.")
+                    .build();
+        }
+
+        if (order.getOrderStatus() != OrderStatus.OUT_FOR_DELIVERY) {
+            throw new BusinessException("Delivery OTP will be available when your order is out for delivery.");
+        }
+
+        // Ensure OTP exists if order is OUT_FOR_DELIVERY
+        if (order.getDeliveryOtp() == null || order.getDeliveryOtp().isBlank()) {
+            String otp = String.format("%06d", new java.security.SecureRandom().nextInt(1_000_000));
+            order.setDeliveryOtp(otp);
+            order.setDeliveryOtpExpiresAt(java.time.LocalDateTime.now().plusMinutes(30));
+            order.setDeliveryOtpUsed(false);
+            order.setDeliveryOtpAttempts(0);
+            order = orderRepository.save(order);
+        }
+
+        boolean isExpired = order.getDeliveryOtpExpiresAt() != null && java.time.LocalDateTime.now().isAfter(order.getDeliveryOtpExpiresAt());
+
+        return DeliveryOtpResponseDTO.builder()
+                .orderId(order.getId())
+                .orderNumber(order.getOrderNumber())
+                .deliveryOtp(order.getDeliveryOtp())
+                .expiresAt(order.getDeliveryOtpExpiresAt())
+                .expired(isExpired)
+                .used(order.isDeliveryOtpUsed())
+                .attempts(order.getDeliveryOtpAttempts())
+                .maxAttempts(5)
+                .message(isExpired ? "Delivery OTP has expired. Please request a new OTP." : "Share this OTP with the delivery partner upon handover.")
+                .build();
+    }
+
+    @Transactional
+    public DeliveryOtpResponseDTO regenerateDeliveryOtp(String userId, String orderId, String ipAddress) {
+        Order order = orderRepository.findByIdAndUserId(orderId, userId)
+                .or(() -> orderRepository.findByOrderNumberAndUserId(orderId, userId))
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found or not authorized for this customer"));
+
+        if (order.getOrderStatus() != OrderStatus.OUT_FOR_DELIVERY) {
+            throw new BusinessException("Delivery OTP can only be generated when order is out for delivery.");
+        }
+
+        if (order.isDeliveryOtpUsed()) {
+            throw new BusinessException("Order has already been delivered. Delivery OTP cannot be regenerated.");
+        }
+
+        // Generate new secure 6-digit OTP and reset attempt counter & expiration
+        String newOtp = String.format("%06d", new java.security.SecureRandom().nextInt(1_000_000));
+        order.setDeliveryOtp(newOtp);
+        order.setDeliveryOtpExpiresAt(java.time.LocalDateTime.now().plusMinutes(30));
+        order.setDeliveryOtpUsed(false);
+        order.setDeliveryOtpAttempts(0);
+        Order saved = orderRepository.save(order);
+
+        auditService.logEvent(
+                "DELIVERY_OTP_REGENERATED",
+                order.getCustomerEmail(),
+                "Customer regenerated Delivery OTP for Order #" + order.getOrderNumber(),
+                ipAddress
+        );
+
+        return DeliveryOtpResponseDTO.builder()
+                .orderId(saved.getId())
+                .orderNumber(saved.getOrderNumber())
+                .deliveryOtp(newOtp)
+                .expiresAt(saved.getDeliveryOtpExpiresAt())
+                .expired(false)
+                .used(false)
+                .attempts(0)
+                .maxAttempts(5)
+                .message("A new Delivery OTP has been generated with 30 minutes validity.")
+                .build();
+    }
+
     private CustomerPaymentDTO mapPaymentToDto(Payment payment) {
         String orderNumber = payment.getOrderId();
         if (payment.getOrderId() != null) {

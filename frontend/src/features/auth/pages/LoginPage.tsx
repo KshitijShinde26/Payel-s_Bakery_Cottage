@@ -10,7 +10,7 @@ import { FormField } from '@/components/ui/FormField'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { z } from 'zod'
-import { ShoppingBag, Store, ShieldCheck, Sparkles } from 'lucide-react'
+import { ShoppingBag, Store, ShieldCheck, Sparkles, Truck } from 'lucide-react'
 
 type LoginFormValues = z.infer<typeof loginSchema>
 
@@ -32,6 +32,12 @@ const ROLES = [
     label: 'Admin',
     icon: ShieldCheck,
     desc: 'Full bakery control',
+  },
+  {
+    id: 'DELIVERY_PARTNER' as const,
+    label: 'Delivery Partner',
+    icon: Truck,
+    desc: 'Deliver orders',
   },
 ]
 
@@ -73,7 +79,11 @@ export const LoginPage: React.FC = () => {
           navigate(fromPath, { replace: true })
           return
         }
-        if (user.role === 'CUSTOMER' && !fromPath.startsWith('/admin') && !fromPath.startsWith('/shopkeeper')) {
+        if (user.role === 'DELIVERY_PARTNER' && fromPath.startsWith('/delivery-partner')) {
+          navigate(fromPath, { replace: true })
+          return
+        }
+        if (user.role === 'CUSTOMER' && !fromPath.startsWith('/admin') && !fromPath.startsWith('/shopkeeper') && !fromPath.startsWith('/delivery-partner')) {
           navigate(fromPath, { replace: true })
           return
         }
@@ -86,6 +96,9 @@ export const LoginPage: React.FC = () => {
           break
         case 'SHOPKEEPER':
           navigate('/shopkeeper/dashboard', { replace: true })
+          break
+        case 'DELIVERY_PARTNER':
+          navigate('/delivery-partner/dashboard', { replace: true })
           break
         case 'CUSTOMER':
           navigate('/customer/dashboard', { replace: true })
@@ -121,7 +134,7 @@ export const LoginPage: React.FC = () => {
               <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wider mb-2">
                 Login Role <span className="text-red-500">*</span>
               </label>
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {ROLES.map((r) => {
                   const Icon = r.icon
                   const isSelected = selectedRole === r.id
@@ -130,15 +143,15 @@ export const LoginPage: React.FC = () => {
                       key={r.id}
                       type="button"
                       onClick={() => setValue('role', r.id, { shouldValidate: true })}
-                      className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition-all cursor-pointer focus-ring ${
+                      className={`flex flex-col items-center justify-center p-2.5 rounded-xl border text-center transition-all cursor-pointer focus-ring ${
                         isSelected
                           ? 'border-amber-600 bg-amber-50/80 text-amber-900 shadow-sm ring-1 ring-amber-500/40 font-semibold'
                           : 'border-stone-200 hover:border-amber-300 hover:bg-amber-50/30 text-stone-600'
                       }`}
                       aria-pressed={isSelected}
                     >
-                      <Icon className={`w-5 h-5 mb-1.5 ${isSelected ? 'text-amber-700' : 'text-stone-400'}`} />
-                      <span className="text-xs font-medium">{r.label}</span>
+                      <Icon className={`w-5 h-5 mb-1 ${isSelected ? 'text-amber-700' : 'text-stone-400'}`} />
+                      <span className="text-[11px] font-medium leading-tight">{r.label}</span>
                     </button>
                   )
                 })}

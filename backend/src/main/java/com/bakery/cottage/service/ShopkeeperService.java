@@ -20,13 +20,16 @@ public class ShopkeeperService {
     private final OrderRepository orderRepository;
     private final CustomCakeRequestRepository customCakeRequestRepository;
     private final ProductRepository productRepository;
+    private final com.bakery.cottage.repository.UserRepository userRepository;
 
     public ShopkeeperService(OrderRepository orderRepository,
                              CustomCakeRequestRepository customCakeRequestRepository,
-                             ProductRepository productRepository) {
+                             ProductRepository productRepository,
+                             com.bakery.cottage.repository.UserRepository userRepository) {
         this.orderRepository = orderRepository;
         this.customCakeRequestRepository = customCakeRequestRepository;
         this.productRepository = productRepository;
+        this.userRepository = userRepository;
     }
 
     @Transactional(readOnly = true)
@@ -197,6 +200,16 @@ public class ShopkeeperService {
                 .landmark(order.getAddressLandmark())
                 .build();
 
+        String partnerName = null;
+        String partnerPhone = null;
+        if (order.getDeliveryPartnerId() != null) {
+            var partnerUser = userRepository.findById(order.getDeliveryPartnerId()).orElse(null);
+            if (partnerUser != null) {
+                partnerName = partnerUser.getFullName();
+                partnerPhone = partnerUser.getPhoneNumber();
+            }
+        }
+
         return OrderDTO.builder()
                 .id(order.getId())
                 .orderNumber(order.getOrderNumber())
@@ -215,6 +228,15 @@ public class ShopkeeperService {
                 .orderStatus(order.getOrderStatus())
                 .paymentStatus(order.getPaymentStatus())
                 .kitchenNotes(order.getKitchenNotes())
+                .deliveryPartnerId(order.getDeliveryPartnerId())
+                .deliveryPartnerName(partnerName)
+                .deliveryPartnerPhone(partnerPhone)
+                .assignedAt(order.getAssignedAt())
+                .outForDeliveryAt(order.getOutForDeliveryAt())
+                .deliveredAt(order.getDeliveredAt())
+                .deliveryOtp(order.getDeliveryOtp())
+                .deliveryFailureReason(order.getDeliveryFailureReason())
+                .deliveryNotes(order.getDeliveryNotes())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .build();

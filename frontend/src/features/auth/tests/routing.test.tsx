@@ -303,4 +303,91 @@ describe('RoleProtectedRoute Guard', () => {
 
     expect(getByTestId('shopkeeper-dashboard')).toBeInTheDocument()
   })
+
+  it('should allow DELIVERY_PARTNER to access delivery partner dashboard', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: {
+        id: '3',
+        fullName: 'Delivery Partner User',
+        email: 'driver@example.com',
+        phoneNumber: '9876543210',
+        role: 'DELIVERY_PARTNER',
+        emailVerified: true,
+      },
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      verifyEmail: vi.fn(),
+      verifyOtp: vi.fn(),
+      forgotPassword: vi.fn(),
+      resetPassword: vi.fn(),
+      logout: vi.fn(),
+      updateUser: vi.fn(),
+      resendOtp: vi.fn(),
+    })
+
+    const { getByTestId } = render(
+      <MemoryRouter initialEntries={['/delivery-partner/dashboard']}>
+        <Routes>
+          <Route
+            path="/delivery-partner/dashboard"
+            element={
+              <RoleProtectedRoute allowedRoles={['DELIVERY_PARTNER']}>
+                <div data-testid="delivery-partner-dashboard">Delivery Partner Dashboard</div>
+              </RoleProtectedRoute>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    expect(getByTestId('delivery-partner-dashboard')).toBeInTheDocument()
+  })
+
+  it('should redirect DELIVERY_PARTNER away from admin dashboard to /delivery-partner/dashboard', () => {
+    vi.mocked(useAuth).mockReturnValue({
+      user: {
+        id: '3',
+        fullName: 'Delivery Partner User',
+        email: 'driver@example.com',
+        phoneNumber: '9876543210',
+        role: 'DELIVERY_PARTNER',
+        emailVerified: true,
+      },
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      verifyEmail: vi.fn(),
+      verifyOtp: vi.fn(),
+      forgotPassword: vi.fn(),
+      resetPassword: vi.fn(),
+      logout: vi.fn(),
+      updateUser: vi.fn(),
+      resendOtp: vi.fn(),
+    })
+
+    const { queryByTestId, getByTestId } = render(
+      <MemoryRouter initialEntries={['/admin/dashboard']}>
+        <Routes>
+          <Route
+            path="/admin/dashboard"
+            element={
+              <RoleProtectedRoute allowedRoles={['ADMIN']}>
+                <div data-testid="admin-dashboard">Admin Dashboard</div>
+              </RoleProtectedRoute>
+            }
+          />
+          <Route
+            path="/delivery-partner/dashboard"
+            element={<div data-testid="delivery-partner-dashboard">Delivery Partner Dashboard</div>}
+          />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    expect(queryByTestId('admin-dashboard')).not.toBeInTheDocument()
+    expect(getByTestId('delivery-partner-dashboard')).toBeInTheDocument()
+  })
 })

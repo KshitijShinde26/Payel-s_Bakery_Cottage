@@ -79,6 +79,7 @@ public class SecurityConfig {
                 .requestMatchers("/customer/**").hasRole("CUSTOMER")
                 .requestMatchers("/shopkeeper/**").hasAnyRole("SHOPKEEPER", "ADMIN")
                 .requestMatchers("/admin/**").hasRole("ADMIN")
+                .requestMatchers("/delivery-partner/**").hasRole("DELIVERY_PARTNER")
                 // All other endpoints require authentication
                 .anyRequest().authenticated()
             );

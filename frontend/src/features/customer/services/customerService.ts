@@ -1,5 +1,5 @@
 import { apiClient } from '@/lib/apiClient'
-import type { CustomerDashboardSummary, CustomerPayment, SubmitPaymentPayload } from '../types'
+import type { CustomerDashboardSummary, CustomerPayment, SubmitPaymentPayload, DeliveryOtpResponse } from '../types'
 import type { Order } from '@/features/checkout/types'
 import type { CustomCakeRequest } from '@/features/customCake/types'
 
@@ -49,6 +49,22 @@ export const customerService = {
    */
   async getCustomCakes(): Promise<CustomCakeRequest[]> {
     const response = await apiClient.get<CustomCakeRequest[]>('/custom-cakes/my-requests')
+    return response.data
+  },
+
+  /**
+   * Fetches active Delivery Handover OTP for an OUT_FOR_DELIVERY order.
+   */
+  async getDeliveryOtp(orderId: string): Promise<DeliveryOtpResponse> {
+    const response = await apiClient.get<DeliveryOtpResponse>(`/customer/orders/${orderId}/delivery-otp`)
+    return response.data
+  },
+
+  /**
+   * Regenerates Delivery Handover OTP if expired or requested.
+   */
+  async regenerateDeliveryOtp(orderId: string): Promise<DeliveryOtpResponse> {
+    const response = await apiClient.post<DeliveryOtpResponse>(`/customer/orders/${orderId}/regenerate-otp`)
     return response.data
   },
 }

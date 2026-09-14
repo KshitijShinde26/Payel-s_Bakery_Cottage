@@ -11,6 +11,7 @@ import {
   Calendar,
 } from 'lucide-react'
 import type { Order, OrderStatus } from '@/features/checkout/types'
+import { DeliveryHandoverOtpCard } from './DeliveryHandoverOtpCard'
 
 interface CustomerActiveOrdersProps {
   orders: Order[]
@@ -149,6 +150,18 @@ export const CustomerActiveOrders: React.FC<CustomerActiveOrdersProps> = ({ orde
                     })}
                   </div>
                 </div>
+
+                {/* Delivery Handover OTP Security Card for OUT_FOR_DELIVERY / Active Deliveries */}
+                {order.orderStatus === 'OUT_FOR_DELIVERY' && (
+                  <DeliveryHandoverOtpCard
+                    orderId={order.id}
+                    orderNumber={order.orderNumber}
+                    orderStatus={order.orderStatus}
+                    initialOtp={order.deliveryOtp}
+                    deliveredAt={order.deliveredAt}
+                    deliveryPartnerName={order.deliveryPartnerName}
+                  />
+                )}
 
                 {/* Items preview snippet */}
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-amber-100/80 text-xs">
