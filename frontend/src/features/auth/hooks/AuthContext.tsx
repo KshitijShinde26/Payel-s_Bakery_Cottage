@@ -39,16 +39,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const initializeAuth = async () => {
       try {
         const baseUrl = (import.meta.env.VITE_API_BASE_URL as string) || 'http://localhost:8080/api'
-        const response = await axios.post<{ accessToken: string }>(
-          `${baseUrl}/auth/refresh`,
-          {},
-          { withCredentials: true }
-        )
-        const token = response.data.accessToken
-        setClientAccessToken(token)
+        try {
+          const response = await axios.post<{ accessToken: string }>(
+            `${baseUrl}/auth/refresh`,
+            {},
+            { withCredentials: true }
+          )
+          const token = response.data?.accessToken
+          if (token) setClientAccessToken(token)
+        } catch {
+          // Refresh endpoint failed (e.g. backend offline or no cookie)
+        }
 
         const currentUser = await authService.getCurrentUser()
-        if (isMounted) {
+        if (isMounted && currentUser) {
           setUser(currentUser)
           setIsAuthenticated(true)
         }

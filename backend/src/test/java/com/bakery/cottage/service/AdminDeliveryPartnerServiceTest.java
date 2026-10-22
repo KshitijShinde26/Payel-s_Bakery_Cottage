@@ -148,8 +148,40 @@ class AdminDeliveryPartnerServiceTest {
         assertNotNull(result);
         assertEquals("partner-user-1", testOrder.getDeliveryPartnerId());
         assertEquals("Handle delicate custom cake with care", testOrder.getDeliveryNotes());
+        assertEquals(BigDecimal.valueOf(60), testOrder.getDeliveryCharge());
         assertNotNull(testOrder.getAssignedAt());
         verify(auditService).logEvent(eq("ORDER_ASSIGNED_TO_DELIVERY_PARTNER"), eq("admin@bakerycottage.com"), anyString(), eq("127.0.0.1"));
+    }
+
+    @Test
+    @DisplayName("Admin or shopkeeper assigns order with custom adjusted delivery charge")
+    void testAssignWithCustomDeliveryCharge() {
+        when(orderRepository.findById("order-1")).thenReturn(Optional.of(testOrder));
+        when(userRepository.findById("partner-user-1")).thenReturn(Optional.of(partnerUser));
+        when(profileRepository.findByUserId("partner-user-1")).thenReturn(Optional.of(partnerProfile));
+        when(orderRepository.save(any(Order.class))).thenAnswer(i -> i.getArgument(0));
+        when(shopkeeperService.mapToOrderDto(any(Order.class))).thenReturn(OrderDTO.builder()
+                .id("order-1")
+                .deliveryPartnerId("partner-user-1")
+                .deliveryCharge(BigDecimal.valueOf(100))
+                .build());
+
+        testOrder.setSubtotal(BigDecimal.valueOf(750));
+
+        AssignDeliveryPartnerRequest req = AssignDeliveryPartnerRequest.builder()
+                .deliveryPartnerId("partner-user-1")
+                .deliveryCharge(BigDecimal.valueOf(100))
+                .deliveryNotes("Far distance order")
+                .build();
+
+        OrderDTO result = adminDeliveryPartnerService.assignOrderToDeliveryPartner("order-1", req, "shopkeeper@bakerycottage.com", "127.0.0.1");
+
+        assertNotNull(result);
+        assertEquals("partner-user-1", testOrder.getDeliveryPartnerId());
+        assertEquals(BigDecimal.valueOf(100), testOrder.getDeliveryCharge());
+        assertEquals("Rs. 100", testOrder.getDeliveryChargeText());
+        assertEquals(BigDecimal.valueOf(850), testOrder.getGrandTotal()); // 750 + 100
+        assertEquals(OrderStatus.OUT_FOR_DELIVERY, testOrder.getOrderStatus());
     }
 
     @Test

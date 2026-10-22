@@ -42,6 +42,10 @@ public class Order {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal subtotal;
 
+    @Column(name = "delivery_charge", precision = 10, scale = 2)
+    @Builder.Default
+    private BigDecimal deliveryCharge = BigDecimal.valueOf(60.00);
+
     @Column(name = "delivery_charge_text", length = 255)
     private String deliveryChargeText;
 

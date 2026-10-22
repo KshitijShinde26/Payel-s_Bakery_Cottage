@@ -116,6 +116,7 @@ public class ShopkeeperService {
                 .or(() -> orderRepository.findByOrderNumber(orderId))
                 .orElseThrow(() -> new ResourceNotFoundException("Order", "id", orderId));
 
+        OrderStatus oldStatus = order.getOrderStatus();
         order.setOrderStatus(request.getStatus());
         if (request.getKitchenNotes() != null && !request.getKitchenNotes().isBlank()) {
             order.setKitchenNotes(request.getKitchenNotes());
@@ -125,6 +126,25 @@ public class ShopkeeperService {
         if (request.getStatus() == OrderStatus.DELIVERED || request.getStatus() == OrderStatus.COMPLETED) {
             if ("CASH_ON_DELIVERY".equalsIgnoreCase(order.getPaymentMethod())) {
                 order.setPaymentStatus(PaymentStatus.PAID);
+            }
+        }
+
+        // If shopkeeper rejected / cancelled the order, restore stock back to previous value
+        if (request.getStatus() == OrderStatus.CANCELLED && oldStatus != OrderStatus.CANCELLED) {
+            if (order.getItems() != null) {
+                for (OrderItem item : order.getItems()) {
+                    if (item.getProductId() != null) {
+                        productRepository.findById(item.getProductId()).ifPresent(prod -> {
+                            int qty = item.getQuantity() != null && item.getQuantity() > 0 ? item.getQuantity() : 1;
+                            int restored = (prod.getStockQuantity() != null ? prod.getStockQuantity() : 0) + qty;
+                            prod.setStockQuantity(restored);
+                            if (restored > 0) {
+                                prod.setAvailable(true);
+                            }
+                            productRepository.save(prod);
+                        });
+                    }
+                }
             }
         }
 
@@ -219,7 +239,8 @@ public class ShopkeeperService {
                 .customerEmail(order.getCustomerEmail())
                 .items(items)
                 .subtotal(order.getSubtotal())
-                .deliveryChargeText(order.getDeliveryChargeText())
+                .deliveryCharge(order.getDeliveryCharge() != null ? order.getDeliveryCharge() : BigDecimal.valueOf(60))
+                .deliveryChargeText(order.getDeliveryChargeText() != null ? order.getDeliveryChargeText() : "Rs. 60")
                 .grandTotal(order.getGrandTotal())
                 .deliveryAddress(address)
                 .preferredDeliveryDate(order.getPreferredDeliveryDate())

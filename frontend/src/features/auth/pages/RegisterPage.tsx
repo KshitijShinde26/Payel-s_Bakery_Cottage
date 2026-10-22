@@ -9,7 +9,7 @@ import { Input, PasswordInput } from '@/components/ui/Input'
 import { FormField } from '@/components/ui/FormField'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/Card'
 import { z } from 'zod'
-import { ShoppingBag, Store, ShieldCheck, Sparkles, AlertTriangle } from 'lucide-react'
+import { ShoppingBag, Store, Sparkles } from 'lucide-react'
 
 type RegisterFormValues = z.infer<typeof registerSchema>
 
@@ -25,12 +25,6 @@ const ROLES = [
     label: 'Shopkeeper',
     icon: Store,
     desc: 'Manage store orders',
-  },
-  {
-    id: 'ADMIN' as const,
-    label: 'Admin',
-    icon: ShieldCheck,
-    desc: 'Central control',
   },
 ]
 
@@ -96,7 +90,7 @@ export const RegisterPage: React.FC = () => {
               <label className="block text-xs font-semibold text-stone-700 uppercase tracking-wider mb-2">
                 Register As <span className="text-red-500">*</span>
               </label>
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-2 gap-3">
                 {ROLES.map((r) => {
                   const Icon = r.icon
                   const isSelected = selectedRole === r.id
@@ -120,15 +114,6 @@ export const RegisterPage: React.FC = () => {
               </div>
               {errors.role && (
                 <p className="mt-1.5 text-xs text-red-500 font-medium">{errors.role.message}</p>
-              )}
-
-              {selectedRole === 'ADMIN' && (
-                <div className="mt-2.5 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                  <span>
-                    <strong>Security Notice:</strong> Administrator accounts cannot be registered publicly and require backend administrative provisioning.
-                  </span>
-                </div>
               )}
             </div>
 

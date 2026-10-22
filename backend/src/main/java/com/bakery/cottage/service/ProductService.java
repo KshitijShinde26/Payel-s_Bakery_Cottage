@@ -109,6 +109,7 @@ public class ProductService {
                 .bestseller(request.getIsBestseller() != null ? request.getIsBestseller() : false)
                 .featured(request.getIsFeatured() != null ? request.getIsFeatured() : false)
                 .shelfLife(request.getShelfLife())
+                .stockQuantity(request.getStockQuantity() != null ? Math.max(0, request.getStockQuantity()) : 20)
                 .allergens(toJsonString(request.getAllergens()))
                 .ingredients(toJsonString(request.getIngredients()))
                 .weightOptions(toJsonString(request.getWeightOptions() != null ? request.getWeightOptions() : List.of("500g", "1kg", "1.5kg")))
@@ -171,11 +172,18 @@ public class ProductService {
         if (request.getMinLeadTimeHours() != null) {
             product.setMinLeadTimeHours(request.getMinLeadTimeHours());
         }
+        if (request.getStockQuantity() != null) {
+            int sq = Math.max(0, request.getStockQuantity());
+            product.setStockQuantity(sq);
+            if (sq <= 0) {
+                product.setAvailable(false);
+            }
+        }
 
         Product updated = productRepository.save(product);
 
         auditService.logEvent("ADMIN_UPDATE_PRODUCT", adminEmail,
-                "Updated product [" + updated.getName() + "] (ID: " + updated.getId() + ")", ipAddress);
+                "Updated product [" + updated.getName() + "] (ID: " + updated.getId() + ") with stock " + updated.getStockQuantity(), ipAddress);
 
         return mapToDto(updated);
     }
@@ -191,6 +199,26 @@ public class ProductService {
 
         auditService.logEvent("ADMIN_TOGGLE_PRODUCT_AVAILABILITY", adminEmail,
                 "Changed availability of product [" + saved.getName() + "] to " + newStatus, ipAddress);
+
+        return mapToDto(saved);
+    }
+
+    @Transactional
+    public ProductDTO updateStock(String id, int stockQuantity, String userEmail, String ipAddress) {
+        Product product = productRepository.findByIdAndDeletedAtIsNull(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Product", "id", id));
+
+        int sanitizedStock = Math.max(0, stockQuantity);
+        product.setStockQuantity(sanitizedStock);
+        if (sanitizedStock <= 0) {
+            product.setAvailable(false);
+        } else {
+            product.setAvailable(true);
+        }
+        Product saved = productRepository.save(product);
+
+        auditService.logEvent("UPDATE_PRODUCT_STOCK", userEmail,
+                "Updated stock for product [" + saved.getName() + "] to " + sanitizedStock, ipAddress);
 
         return mapToDto(saved);
     }
@@ -272,6 +300,7 @@ public class ProductService {
                 .gallery(fromJsonString(product.getGallery()))
                 .isEggless(product.isEggless())
                 .isAvailable(product.isAvailable())
+                .stockQuantity(product.getStockQuantity() != null ? product.getStockQuantity() : 0)
                 .isBestseller(product.isBestseller())
                 .isFeatured(product.isFeatured())
                 .shelfLife(product.getShelfLife())

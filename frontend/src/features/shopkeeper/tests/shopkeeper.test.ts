@@ -174,4 +174,60 @@ describe('Shopkeeper Service Real API Operations', () => {
     expect(reviewed.status).toBe('APPROVED')
     expect(reviewed.confirmedPrice).toBe(2450)
   })
+
+  it('should fetch delivery partners for dispatch assignment', async () => {
+    const mockPartners = [
+      { id: 'dp-1', fullName: 'Rohan Sharma', phoneNumber: '9876543210', status: 'ACTIVE' },
+    ]
+    vi.spyOn(apiClient, 'get').mockResolvedValueOnce({ data: mockPartners })
+
+    const partners = await shopkeeperService.getDeliveryPartners()
+    expect(partners).toHaveLength(1)
+    expect(partners[0].fullName).toBe('Rohan Sharma')
+  })
+
+  it('should assign delivery partner and set delivery charges when cake is ready', async () => {
+    const assignedOrder: Order = {
+      id: 'ord-test-1',
+      orderNumber: 'PBC-999901',
+      userId: 'user-test',
+      items: [],
+      subtotal: 800,
+      deliveryCharge: 80,
+      deliveryChargeText: 'Rs. 80',
+      grandTotal: 880,
+      deliveryAddress: {
+        id: 'addr-1',
+        fullName: 'Real Customer',
+        phoneNumber: '+91 98765 00000',
+        addressLine: '123 Real Street',
+        areaLocality: 'Kothrud',
+        city: 'Pune',
+        state: 'Maharashtra',
+        pincode: '411038',
+      },
+      preferredDeliveryDate: '2026-08-25',
+      preferredDeliveryTime: 'Evening (05:00 PM – 08:00 PM)',
+      paymentMethod: 'CASH_ON_DELIVERY',
+      orderStatus: 'OUT_FOR_DELIVERY',
+      paymentStatus: 'PENDING',
+      deliveryPartnerId: 'dp-1',
+      deliveryPartnerName: 'Rohan Sharma',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+
+    vi.spyOn(apiClient, 'post').mockResolvedValueOnce({ data: assignedOrder })
+
+    const result = await shopkeeperService.assignDeliveryPartner('ord-test-1', {
+      deliveryPartnerId: 'dp-1',
+      deliveryCharge: 80,
+      deliveryNotes: 'Keep upright',
+    })
+
+    expect(result.orderStatus).toBe('OUT_FOR_DELIVERY')
+    expect(result.deliveryCharge).toBe(80)
+    expect(result.grandTotal).toBe(880)
+    expect(result.deliveryPartnerId).toBe('dp-1')
+  })
 })

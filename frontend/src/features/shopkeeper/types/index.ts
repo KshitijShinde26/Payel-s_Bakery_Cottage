@@ -38,6 +38,12 @@ export interface UpdateOrderStatusPayload {
   kitchenNotes?: string
 }
 
+export interface AssignDeliveryPartnerPayload {
+  deliveryPartnerId: string
+  deliveryCharge?: number
+  deliveryNotes?: string
+}
+
 export interface ReviewCustomCakePayload {
   status: CustomCakeStatus
   confirmedPrice?: number

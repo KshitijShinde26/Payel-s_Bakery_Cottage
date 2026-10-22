@@ -7,6 +7,7 @@ import { ProductCard } from '@/components/catalog/ProductCard'
 import { Button } from '@/components/ui/Button'
 import { useCart } from '@/features/cart/hooks/useCart'
 import { useWishlist } from '@/features/wishlist/hooks/useWishlist'
+import toast from 'react-hot-toast'
 import {
   Heart,
   ShoppingBag,
@@ -18,6 +19,7 @@ import {
   Plus,
   Minus,
   Star,
+  Package,
 } from 'lucide-react'
 
 export const ProductDetailsPage: React.FC = () => {
@@ -26,6 +28,7 @@ export const ProductDetailsPage: React.FC = () => {
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist()
 
   const [product, setProduct] = useState<Product | null>(null)
+  const [currentStock, setCurrentStock] = useState<number>(10)
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([])
   const [selectedImage, setSelectedImage] = useState<string>('')
   const [selectedWeight, setSelectedWeight] = useState<string>('')
@@ -43,6 +46,7 @@ export const ProductDetailsPage: React.FC = () => {
         const data = await productService.getProductById(id)
         if (data) {
           setProduct(data)
+          setCurrentStock(productService.getProductStock(data.id, data.stockQuantity))
           setSelectedImage(data.image)
           if (data.weightOptions && data.weightOptions.length > 0) {
             setSelectedWeight(data.weightOptions[0])
@@ -68,10 +72,35 @@ export const ProductDetailsPage: React.FC = () => {
     fetchProductDetails()
   }, [id])
 
+  // Listen to cross-component live stock changes
+  useEffect(() => {
+    const handleStockChange = (e: Event) => {
+      const customEvent = e as CustomEvent
+      if (product && customEvent.detail && String(customEvent.detail.productId) === String(product.id)) {
+        setCurrentStock(Number(customEvent.detail.stockQuantity))
+      }
+    }
+    window.addEventListener('pbc-stock-changed', handleStockChange)
+    return () => {
+      window.removeEventListener('pbc-stock-changed', handleStockChange)
+    }
+  }, [product])
+
   const handleAddToCart = async () => {
-    if (!product || !product.isAvailable) return
+    if (!product) return
+
+    if (currentStock <= 0 || !product.isAvailable) {
+      toast.error(`There is no stock available for "${product.name}". Please check back later!`)
+      return
+    }
+
+    if (quantity > currentStock) {
+      toast.error(`Only ${currentStock} cake${currentStock > 1 ? 's' : ''} available in stock. Please reduce your quantity.`)
+      return
+    }
+
     await addToCart({
-      product,
+      product: { ...product, stockQuantity: currentStock },
       weightOption: selectedWeight || product.weightOptions?.[0] || 'Standard',
       quantity,
     })
@@ -177,7 +206,7 @@ export const ProductDetailsPage: React.FC = () => {
                 )}
               </div>
 
-              {!product.isAvailable && (
+              {(!product.isAvailable || currentStock <= 0) && (
                 <div className="absolute inset-0 bg-stone-900/60 backdrop-blur-[2px] flex items-center justify-center">
                   <span className="rounded-full bg-red-600 px-4 py-1.5 text-sm font-bold text-white uppercase tracking-wider shadow-lg">
                     Currently Out of Stock
@@ -244,6 +273,57 @@ export const ProductDetailsPage: React.FC = () => {
                 </span>
               </div>
 
+              {/* Real-time Customer Available Stock Indicator */}
+              <div
+                className={`mt-4 p-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                  currentStock > 5
+                    ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+                    : currentStock > 0
+                    ? 'bg-amber-50/80 border-amber-300 text-amber-950'
+                    : 'bg-rose-50 border-rose-200 text-rose-950'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <div
+                    className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                      currentStock > 5
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : currentStock > 0
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-rose-100 text-rose-800'
+                    }`}
+                  >
+                    <Package className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold block">
+                      {currentStock > 5
+                        ? `Available Stock: ${currentStock} cakes ready`
+                        : currentStock > 0
+                        ? `Only ${currentStock} cake${currentStock > 1 ? 's' : ''} left in stock!`
+                        : 'Currently Out of Stock'}
+                    </span>
+                    <span className="text-[11px] text-stone-500 block">
+                      {currentStock > 0
+                        ? 'Cakes are freshly baked & daily dispatched'
+                        : 'Please check back soon or explore other cakes'}
+                    </span>
+                  </div>
+                </div>
+
+                <span
+                  className={`px-3 py-1 rounded-full text-[11px] font-extrabold tracking-wide uppercase shrink-0 shadow-xs ${
+                    currentStock > 5
+                      ? 'bg-emerald-600 text-white'
+                      : currentStock > 0
+                      ? 'bg-amber-600 text-white animate-pulse'
+                      : 'bg-rose-600 text-white'
+                  }`}
+                >
+                  {currentStock > 5 ? `${currentStock} In Stock` : currentStock > 0 ? `Only ${currentStock} Left` : 'Sold Out'}
+                </span>
+              </div>
+
               {/* Description */}
               <p className="mt-4 text-xs sm:text-sm text-stone-600 leading-relaxed font-sans">
                 {product.description}
@@ -283,7 +363,7 @@ export const ProductDetailsPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                    disabled={quantity <= 1 || !product.isAvailable}
+                    disabled={quantity <= 1 || !product.isAvailable || currentStock <= 0}
                     className="p-1.5 rounded-lg text-stone-600 hover:bg-white disabled:opacity-40 cursor-pointer"
                     aria-label="Decrease quantity"
                   >
@@ -292,29 +372,46 @@ export const ProductDetailsPage: React.FC = () => {
                   <span className="w-8 text-center text-xs font-bold text-stone-900">{quantity}</span>
                   <button
                     type="button"
-                    onClick={() => setQuantity((q) => q + 1)}
-                    disabled={!product.isAvailable}
+                    onClick={() => {
+                      if (quantity >= currentStock) {
+                        toast.error(`Cannot order more. Only ${currentStock} cake${currentStock > 1 ? 's' : ''} available in stock!`)
+                        return
+                      }
+                      setQuantity((q) => q + 1)
+                    }}
+                    disabled={quantity >= currentStock || !product.isAvailable || currentStock <= 0}
                     className="p-1.5 rounded-lg text-stone-600 hover:bg-white disabled:opacity-40 cursor-pointer"
                     aria-label="Increase quantity"
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
+                {currentStock > 0 && currentStock <= 5 && (
+                  <span className="text-[11px] font-semibold text-amber-700">
+                    Max {currentStock} allowed per order
+                  </span>
+                )}
               </div>
 
               {/* Actions Button Group */}
               <div className="mt-8 flex flex-col sm:flex-row gap-3">
                 <Button
                   onClick={handleAddToCart}
-                  disabled={!product.isAvailable}
+                  disabled={!product.isAvailable || currentStock <= 0}
                   className={`flex-1 py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 shadow-md ${
-                    product.isAvailable
+                    product.isAvailable && currentStock > 0
                       ? 'bg-amber-600 hover:bg-amber-700 text-white'
                       : 'bg-stone-200 text-stone-400 cursor-not-allowed'
                   }`}
                 >
                   <ShoppingBag className="w-4 h-4" />
-                  <span>{product.isAvailable ? 'Add to Cart' : 'Currently Unavailable'}</span>
+                  <span>
+                    {currentStock <= 0
+                      ? 'No Stock Available'
+                      : product.isAvailable
+                      ? 'Add to Cart'
+                      : 'Currently Unavailable'}
+                  </span>
                 </Button>
 
                 <button

@@ -50,6 +50,7 @@ import {
   Truck,
   Navigation,
   Lock,
+  Package,
 } from 'lucide-react'
 
 export const AdminDashboard: React.FC = () => {
@@ -139,8 +140,62 @@ export const AdminDashboard: React.FC = () => {
     shelfLife: '3–4 days refrigerated',
     weightOptions: '500g, 1kg, 1.5kg',
     minLeadTimeHours: 24,
+    stockQuantity: 10,
   }
   const [productForm, setProductForm] = useState(initialProductForm)
+
+  // Quick Stock Edit State for Admin
+  const [adminQuickStockEditId, setAdminQuickStockEditId] = useState<string | null>(null)
+  const [adminStockInputValue, setAdminStockInputValue] = useState<number>(0)
+  const [isUpdatingAdminStock, setIsUpdatingAdminStock] = useState<boolean>(false)
+
+  const handleStartAdminQuickStock = (prod: Product) => {
+    setAdminQuickStockEditId(prod.id)
+    setAdminStockInputValue(productService.getProductStock(prod.id, prod.stockQuantity))
+  }
+
+  const handleSaveAdminQuickStock = async (productId: string) => {
+    setIsUpdatingAdminStock(true)
+    try {
+      const updatedQty = Math.max(0, Number(adminStockInputValue))
+      await adminService.updateProductStock(productId, updatedQty)
+      setProductsList((prev) =>
+        prev.map((p) =>
+          p.id === productId ? { ...p, stockQuantity: updatedQty, isAvailable: updatedQty > 0 } : p
+        )
+      )
+      setAdminQuickStockEditId(null)
+      toast.success(`Cake stock updated to ${updatedQty} units!`)
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || 'Failed to update stock quantity.')
+    } finally {
+      setIsUpdatingAdminStock(false)
+    }
+  }
+
+  // Cross-component live stock listener
+  useEffect(() => {
+    const handleStockChange = (e: Event) => {
+      const customEvent = e as CustomEvent
+      if (customEvent.detail?.productId) {
+        setProductsList((prev) =>
+          prev.map((p) =>
+            String(p.id) === String(customEvent.detail.productId)
+              ? {
+                  ...p,
+                  stockQuantity: Number(customEvent.detail.stockQuantity),
+                  isAvailable: Number(customEvent.detail.stockQuantity) > 0,
+                }
+              : p
+          )
+        )
+      }
+    }
+    window.addEventListener('pbc-stock-changed', handleStockChange)
+    return () => {
+      window.removeEventListener('pbc-stock-changed', handleStockChange)
+    }
+  }, [])
 
   // Review Custom Cake Form State
   const [cakeReviewForm, setCakeReviewForm] = useState<{
@@ -245,12 +300,25 @@ export const AdminDashboard: React.FC = () => {
   // Update order status
   const handleUpdateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
+      const targetOrder = ordersList.find((o) => o.id === orderId)
+      const previousStatus = targetOrder?.orderStatus
+
       const updated = await adminService.updateOrderStatus(orderId, { status: newStatus })
       setOrdersList((prev) => prev.map((o) => (o.id === orderId ? updated : o)))
       if (selectedOrder && selectedOrder.id === orderId) {
         setSelectedOrder(updated)
       }
-      toast.success(`Order #${updated.orderNumber} transitioned to ${newStatus.replace(/_/g, ' ')}!`)
+
+      // If order is cancelled/rejected, restore the stock back to previous value!
+      if (newStatus === 'CANCELLED' && previousStatus !== 'CANCELLED' && targetOrder?.items) {
+        productService.restoreStockForOrder(
+          targetOrder.items.map((it) => ({ productId: it.productId, quantity: it.quantity }))
+        )
+        toast.success(`Order #${updated.orderNumber} cancelled. Cake stock restored to previous value!`)
+      } else {
+        toast.success(`Order #${updated.orderNumber} transitioned to ${newStatus.replace(/_/g, ' ')}!`)
+      }
+
       const summaryRes = await adminService.getSummary().catch(() => null)
       if (summaryRes) setSummary(summaryRes)
     } catch {
@@ -298,6 +366,7 @@ export const AdminDashboard: React.FC = () => {
   // ==========================================
 
   const handleOpenAddProduct = () => {
+    setEditingProduct(null)
     setProductForm(initialProductForm)
     setIsAddProductOpen(true)
   }
@@ -319,6 +388,7 @@ export const AdminDashboard: React.FC = () => {
       shelfLife: prod.shelfLife || '3–4 days refrigerated',
       weightOptions: prod.weightOptions ? prod.weightOptions.join(', ') : '500g, 1kg, 1.5kg',
       minLeadTimeHours: prod.minLeadTimeHours || 24,
+      stockQuantity: prod.stockQuantity ?? productService.getProductStock(prod.id, 10),
     })
   }
 
@@ -342,6 +412,7 @@ export const AdminDashboard: React.FC = () => {
     e.preventDefault()
     setIsSubmittingProduct(true)
 
+    const stockQty = Math.max(0, Number(productForm.stockQuantity) || 0)
     const payload = {
       name: productForm.name.trim(),
       category: productForm.category,
@@ -351,25 +422,34 @@ export const AdminDashboard: React.FC = () => {
       shortDescription: productForm.shortDescription.trim() || productForm.description.substring(0, 100),
       image: productForm.image,
       isEggless: productForm.isEggless,
-      isAvailable: productForm.isAvailable,
+      isAvailable: stockQty > 0 ? productForm.isAvailable : false,
       isBestseller: productForm.isBestseller,
       isFeatured: productForm.isFeatured,
       shelfLife: productForm.shelfLife,
       weightOptions: productForm.weightOptions.split(',').map((w) => w.trim()).filter(Boolean),
       minLeadTimeHours: Number(productForm.minLeadTimeHours),
+      stockQuantity: stockQty,
     }
 
     try {
       if (editingProduct) {
         const updated = await adminService.updateProduct(editingProduct.id, payload)
-        setProductsList((prev) => prev.map((p) => (p.id === editingProduct.id ? updated : p)))
+        await adminService.updateProductStock(editingProduct.id, stockQty)
+        setProductsList((prev) =>
+          prev.map((p) =>
+            p.id === editingProduct.id
+              ? { ...updated, stockQuantity: stockQty, isAvailable: stockQty > 0 ? updated.isAvailable : false }
+              : p
+          )
+        )
         setEditingProduct(null)
-        toast.success(`Product "${updated.name}" updated successfully!`)
+        toast.success(`Product "${updated.name}" updated successfully (Stock: ${stockQty})!`)
       } else {
         const created = await adminService.createProduct(payload)
-        setProductsList((prev) => [created, ...prev])
+        await adminService.updateProductStock(created.id, stockQty)
+        setProductsList((prev) => [{ ...created, stockQuantity: stockQty }, ...prev])
         setIsAddProductOpen(false)
-        toast.success(`New product "${created.name}" created!`)
+        toast.success(`New product "${created.name}" created with stock ${stockQty}!`)
       }
       // Refresh dynamic categories
       const catRes = await productService.getCategories().catch(() => CATEGORIES)
@@ -1521,99 +1601,176 @@ export const AdminDashboard: React.FC = () => {
 
           {/* Products Grid with Complete Controls */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {filteredProducts.map((prod) => (
-              <div
-                key={prod.id}
-                className="bg-white rounded-3xl border border-stone-200 hover:border-amber-400 p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group"
-              >
-                <div>
-                  {/* Product Image & Badges */}
-                  <div className="relative rounded-2xl overflow-hidden mb-3 aspect-square bg-stone-100">
-                    <img
-                      src={prod.image}
-                      alt={prod.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute top-2 left-2 flex flex-col gap-1">
-                      {prod.isEggless && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white shadow-xs">
-                          100% Eggless
+            {filteredProducts.map((prod) => {
+              const liveStock = productService.getProductStock(prod.id, prod.stockQuantity)
+              const isEditingQuickStock = adminQuickStockEditId === prod.id
+
+              return (
+                <div
+                  key={prod.id}
+                  className="bg-white rounded-3xl border border-stone-200 hover:border-amber-400 p-4 shadow-xs hover:shadow-md transition-all flex flex-col justify-between group"
+                >
+                  <div>
+                    {/* Product Image & Badges */}
+                    <div className="relative rounded-2xl overflow-hidden mb-3 aspect-square bg-stone-100">
+                      <img
+                        src={prod.image}
+                        alt={prod.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                      <div className="absolute top-2 left-2 flex flex-col gap-1">
+                        {prod.isEggless && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-600 text-white shadow-xs">
+                            100% Eggless
+                          </span>
+                        )}
+                        {prod.isBestseller && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white shadow-xs">
+                            Bestseller
+                          </span>
+                        )}
+                        {prod.isFeatured && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-600 text-white shadow-xs">
+                            Featured
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs ${
+                            liveStock > 5
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : liveStock > 0
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-rose-100 text-rose-800'
+                          }`}
+                        >
+                          {liveStock > 0 ? `${liveStock} in stock` : 'Out of Stock'}
                         </span>
-                      )}
-                      {prod.isBestseller && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white shadow-xs">
-                          Bestseller
-                        </span>
-                      )}
-                      {prod.isFeatured && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-600 text-white shadow-xs">
-                          Featured
-                        </span>
-                      )}
+                      </div>
                     </div>
 
-                    <div className="absolute top-2 right-2">
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs ${
-                          prod.isAvailable ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                    <h3 className="font-serif font-bold text-stone-900 text-sm line-clamp-1">{prod.name}</h3>
+                    <span className="text-[11px] text-amber-800 font-semibold block">{prod.category}</span>
+                    <p className="text-xs text-stone-500 line-clamp-2 mt-1">{prod.shortDescription || prod.description}</p>
+                  </div>
+
+                  <div className="pt-3 mt-3 border-t border-stone-100 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-base font-serif font-bold text-stone-900">₹{prod.price}</span>
+                        {prod.originalPrice && (
+                          <span className="text-xs text-stone-400 line-through ml-1.5">₹{prod.originalPrice}</span>
+                        )}
+                      </div>
+                      {/* Availability Switch */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleProductAvailability(prod)}
+                        className={`text-xs font-semibold px-2.5 py-1 rounded-xl cursor-pointer transition-colors ${
+                          prod.isAvailable && liveStock > 0
+                            ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                            : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
                         }`}
+                        title="Click to toggle availability"
                       >
-                        {prod.isAvailable ? 'Active' : 'Unavailable'}
-                      </span>
+                        {prod.isAvailable && liveStock > 0 ? 'In Stock' : 'Out of Stock'}
+                      </button>
                     </div>
-                  </div>
 
-                  <h3 className="font-serif font-bold text-stone-900 text-sm line-clamp-1">{prod.name}</h3>
-                  <span className="text-[11px] text-amber-800 font-semibold block">{prod.category}</span>
-                  <p className="text-xs text-stone-500 line-clamp-2 mt-1">{prod.shortDescription || prod.description}</p>
-                </div>
+                    {/* Stock Management Box */}
+                    <div className="bg-stone-50 rounded-2xl p-2.5 border border-stone-100">
+                      <div className="flex items-center justify-between mb-1.5 text-xs">
+                        <span className="font-bold text-stone-600 flex items-center gap-1 text-[11px]">
+                          <Package className="w-3.5 h-3.5 text-amber-700" /> Stock Quantity:
+                        </span>
+                        <span className={`font-mono font-bold text-xs ${
+                          liveStock > 5 ? 'text-emerald-700' : liveStock > 0 ? 'text-amber-700' : 'text-rose-600'
+                        }`}>
+                          {liveStock} cakes
+                        </span>
+                      </div>
 
-                <div className="pt-3 mt-3 border-t border-stone-100 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-base font-serif font-bold text-stone-900">₹{prod.price}</span>
-                      {prod.originalPrice && (
-                        <span className="text-xs text-stone-400 line-through ml-1.5">₹{prod.originalPrice}</span>
+                      {isEditingQuickStock ? (
+                        <div className="space-y-1.5 pt-1">
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setAdminStockInputValue((v) => Math.max(0, v - 1))}
+                              className="w-7 h-7 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-800 font-bold flex items-center justify-center cursor-pointer text-xs"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              min="0"
+                              value={adminStockInputValue}
+                              onChange={(e) => setAdminStockInputValue(Math.max(0, parseInt(e.target.value) || 0))}
+                              className="w-full text-center px-1 py-1 text-xs font-bold border border-amber-300 rounded-lg bg-white text-stone-900 focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setAdminStockInputValue((v) => v + 1)}
+                              className="w-7 h-7 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-800 font-bold flex items-center justify-center cursor-pointer text-xs"
+                            >
+                              +
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleSaveAdminQuickStock(prod.id)}
+                              disabled={isUpdatingAdminStock}
+                              className="flex-1 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] cursor-pointer"
+                            >
+                              {isUpdatingAdminStock ? '...' : 'Save Stock'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAdminQuickStockEditId(null)}
+                              className="text-[11px] text-stone-500 hover:text-stone-700 px-1 cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleStartAdminQuickStock(prod)}
+                          className="w-full py-1 rounded-lg bg-white hover:bg-amber-50 text-stone-700 hover:text-amber-900 border border-stone-200 text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                        >
+                          <Edit3 className="w-3 h-3 text-amber-700" />
+                          <span>Quick Adjust Stock</span>
+                        </button>
                       )}
                     </div>
-                    {/* Availability Switch */}
-                    <button
-                      type="button"
-                      onClick={() => handleToggleProductAvailability(prod)}
-                      className={`text-xs font-semibold px-2.5 py-1 rounded-xl cursor-pointer transition-colors ${
-                        prod.isAvailable
-                          ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                          : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
-                      }`}
-                      title="Click to toggle availability"
-                    >
-                      {prod.isAvailable ? 'In Stock' : 'Out of Stock'}
-                    </button>
-                  </div>
 
-                  {/* Actions (Edit & Delete) */}
-                  <div className="flex items-center gap-2 pt-1 border-t border-stone-100">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEditProduct(prod)}
-                      className="flex-1 py-1.5 rounded-xl bg-stone-100 hover:bg-amber-100 text-stone-800 hover:text-amber-900 font-semibold text-xs inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                      <span>Edit</span>
-                    </button>
+                    {/* Actions (Edit & Delete) */}
+                    <div className="flex items-center gap-2 pt-1 border-t border-stone-100">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditProduct(prod)}
+                        className="flex-1 py-1.5 rounded-xl bg-stone-100 hover:bg-amber-100 text-stone-800 hover:text-amber-900 font-semibold text-xs inline-flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>Edit Product</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => setDeleteConfirmProduct(prod)}
-                      className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 cursor-pointer transition-colors"
-                      title="Delete / Archive Product"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmProduct(prod)}
+                        className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 cursor-pointer transition-colors"
+                        title="Delete / Archive Product"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           {filteredProducts.length === 0 && (
@@ -2409,8 +2566,8 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Price & Original Price */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Price & Original Price & Stock */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
                     Selling Price (₹) *
@@ -2441,6 +2598,25 @@ export const AdminDashboard: React.FC = () => {
                       })
                     }
                     className="w-full px-3.5 py-2 text-xs rounded-xl bg-stone-50 border border-stone-200 text-stone-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 uppercase tracking-wider mb-1">
+                    Available Stock *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    required
+                    value={productForm.stockQuantity}
+                    onChange={(e) =>
+                      setProductForm({
+                        ...productForm,
+                        stockQuantity: Math.max(0, parseInt(e.target.value) || 0),
+                      })
+                    }
+                    className="w-full px-3.5 py-2 text-xs rounded-xl bg-amber-50/50 border border-amber-300 text-stone-900 font-bold focus:ring-2 focus:ring-amber-500"
                   />
                 </div>
 

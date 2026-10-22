@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { cartService } from '../services/cartService'
+import { productService } from '@/features/catalog/services/productService'
 import type { CartItem, CartSummary, AddToCartPayload } from '../types'
 import toast from 'react-hot-toast'
 
@@ -64,8 +65,27 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false
       }
 
-      if (!payload.product.isAvailable) {
-        toast.error('This item is currently out of stock.')
+      const availableStock = productService.getProductStock(
+        payload.product.id,
+        payload.product.stockQuantity
+      )
+
+      if (availableStock <= 0 || !payload.product.isAvailable) {
+        toast.error(`Sorry, there is no stock available for "${payload.product.name}"!`)
+        return false
+      }
+
+      const weightOption = payload.weightOption || payload.product.weightOptions?.[0] || 'Standard'
+      const existingItem = items.find(
+        (i) => i.productId === payload.product.id && i.weightOption === weightOption
+      )
+      const requestedQty = payload.quantity ?? 1
+      const currentCartQty = existingItem ? existingItem.quantity : 0
+
+      if (currentCartQty + requestedQty > availableStock) {
+        toast.error(
+          `Cannot add more. Only ${availableStock} cake${availableStock > 1 ? 's' : ''} available in stock!`
+        )
         return false
       }
 
@@ -89,6 +109,17 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateQuantity = useCallback(
     async (itemId: string, quantity: number) => {
       if (quantity < 1) return
+
+      const targetItem = items.find((i) => i.id === itemId)
+      if (targetItem) {
+        const availableStock = productService.getProductStock(targetItem.productId)
+        if (quantity > availableStock) {
+          toast.error(
+            `Cannot increase quantity. Only ${availableStock} cake${availableStock > 1 ? 's' : ''} available in stock!`
+          )
+          return
+        }
+      }
 
       try {
         const updated = await cartService.updateQuantity(itemId, quantity, user?.id, items)

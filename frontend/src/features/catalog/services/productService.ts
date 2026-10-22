@@ -437,6 +437,45 @@ export const CATEGORIES: CategoryInfo[] = [
   },
 ]
 
+const STOCK_STORAGE_KEY = 'pbc_product_stocks'
+
+export const getStoredStocks = (): Record<string, number> => {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(STOCK_STORAGE_KEY) : null
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return {}
+}
+
+export const setStoredStock = (productId: string, stock: number) => {
+  try {
+    const current = getStoredStocks()
+    current[productId] = Math.max(0, stock)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STOCK_STORAGE_KEY, JSON.stringify(current))
+      window.dispatchEvent(new CustomEvent('pbc-stock-changed', { detail: { productId, stock: current[productId] } }))
+    }
+  } catch {}
+}
+
+export const applyStockOverride = (product: Product): Product => {
+  const stocks = getStoredStocks()
+  if (product.id in stocks) {
+    const stock = stocks[product.id]
+    return {
+      ...product,
+      stockQuantity: stock,
+      isAvailable: stock > 0,
+    }
+  }
+  const defaultStock = product.stockQuantity ?? (product.isAvailable ? 10 : 0)
+  return {
+    ...product,
+    stockQuantity: defaultStock,
+    isAvailable: defaultStock > 0,
+  }
+}
+
 export const productService = {
   async getProducts(params?: ProductFilterParams): Promise<Product[]> {
     try {
@@ -452,7 +491,7 @@ export const productService = {
         },
       })
       if (Array.isArray(response.data)) {
-        return response.data
+        return response.data.map(applyStockOverride)
       }
       return []
     } catch (error) {
@@ -465,7 +504,7 @@ export const productService = {
     try {
       const response = await apiClient.get<Product>(`/products/${id}`)
       if (response.data) {
-        return response.data
+        return applyStockOverride(response.data)
       }
       return null
     } catch (error) {
@@ -490,7 +529,7 @@ export const productService = {
     try {
       const response = await apiClient.get<Product[]>('/products/featured')
       if (Array.isArray(response.data)) {
-        return response.data
+        return response.data.map(applyStockOverride)
       }
       return []
     } catch (error) {
@@ -503,12 +542,79 @@ export const productService = {
     try {
       const response = await apiClient.get<Product[]>('/products/bestsellers')
       if (Array.isArray(response.data)) {
-        return response.data
+        return response.data.map(applyStockOverride)
       }
       return []
     } catch (error) {
       console.warn('Failed to fetch bestsellers from backend API:', error)
       return []
     }
+  },
+
+  async updateProductStock(id: string, newStock: number): Promise<Product> {
+    const sanitized = Math.max(0, newStock)
+    setStoredStock(id, sanitized)
+    try {
+      const response = await apiClient.put<Product>(`/shopkeeper/products/${id}/stock`, {
+        stockQuantity: sanitized,
+      })
+      if (response.data) {
+        return applyStockOverride(response.data)
+      }
+    } catch {
+      // Backend unavailable or error, local update succeeded
+    }
+    const existing = await this.getProductById(id)
+    if (existing) {
+      return {
+        ...existing,
+        stockQuantity: sanitized,
+        isAvailable: sanitized > 0,
+      }
+    }
+    return {
+      id,
+      name: 'Cake',
+      category: 'Cakes',
+      price: 500,
+      description: '',
+      shortDescription: '',
+      image: '/images/Product_1.jpeg',
+      isEggless: true,
+      isAvailable: sanitized > 0,
+      stockQuantity: sanitized,
+    }
+  },
+
+  deductStockForOrder(items: { productId: string; quantity?: number }[]): void {
+    items.forEach((item) => {
+      if (!item.productId) return
+      const current = this.getProductStock(item.productId)
+      const qty = item.quantity && item.quantity > 0 ? item.quantity : 1
+      const updated = Math.max(0, current - qty)
+      setStoredStock(item.productId, updated)
+    })
+  },
+
+  restoreStockForOrder(items: { productId: string; quantity?: number }[]): void {
+    items.forEach((item) => {
+      if (!item.productId) return
+      const current = this.getProductStock(item.productId)
+      const qty = item.quantity && item.quantity > 0 ? item.quantity : 1
+      const updated = current + qty
+      setStoredStock(item.productId, updated)
+    })
+  },
+
+  getProductStock(productId: string, defaultStock?: number): number {
+    const stocks = getStoredStocks()
+    if (productId in stocks) return stocks[productId]
+    if (defaultStock !== undefined && defaultStock !== null) return defaultStock
+    const p = CLIENT_PRODUCTS.find((prod) => prod.id === productId)
+    return p?.stockQuantity ?? (p?.isAvailable !== false ? 10 : 0)
+  },
+
+  setStoredStock(productId: string, quantity: number): void {
+    setStoredStock(productId, quantity)
   },
 }

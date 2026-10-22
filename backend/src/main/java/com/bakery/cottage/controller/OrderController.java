@@ -27,10 +27,14 @@ public class OrderController {
 
     private final OrderRepository orderRepository;
     private final ShopkeeperService shopkeeperService;
+    private final com.bakery.cottage.repository.ProductRepository productRepository;
 
-    public OrderController(OrderRepository orderRepository, ShopkeeperService shopkeeperService) {
+    public OrderController(OrderRepository orderRepository,
+                           ShopkeeperService shopkeeperService,
+                           com.bakery.cottage.repository.ProductRepository productRepository) {
         this.orderRepository = orderRepository;
         this.shopkeeperService = shopkeeperService;
+        this.productRepository = productRepository;
     }
 
     private UserPrincipal getPrincipal(Principal principal) {
@@ -52,6 +56,14 @@ public class OrderController {
         String customerPhone = userPrincipal != null ? userPrincipal.getUser().getPhoneNumber() : (request.getDeliveryAddress() != null ? request.getDeliveryAddress().getPhoneNumber() : "");
         String customerEmail = userPrincipal != null ? userPrincipal.getUsername() : request.getCustomerEmail();
 
+        BigDecimal deliveryCharge = request.getDeliveryCharge() != null ? request.getDeliveryCharge() : BigDecimal.valueOf(60);
+        String chargeText = request.getDeliveryChargeText() != null && !request.getDeliveryChargeText().isBlank()
+                ? request.getDeliveryChargeText()
+                : "Rs. " + deliveryCharge.stripTrailingZeros().toPlainString();
+        BigDecimal grandTotal = request.getGrandTotal() != null
+                ? request.getGrandTotal()
+                : (request.getSubtotal() != null ? request.getSubtotal().add(deliveryCharge) : deliveryCharge);
+
         Order order = Order.builder()
                 .orderNumber(request.getOrderNumber() != null ? request.getOrderNumber() : "PBC-" + System.currentTimeMillis())
                 .userId(userId)
@@ -59,8 +71,9 @@ public class OrderController {
                 .customerPhone(customerPhone)
                 .customerEmail(customerEmail)
                 .subtotal(request.getSubtotal())
-                .deliveryChargeText(request.getDeliveryChargeText())
-                .grandTotal(request.getGrandTotal())
+                .deliveryCharge(deliveryCharge)
+                .deliveryChargeText(chargeText)
+                .grandTotal(grandTotal)
                 .addressFullName(request.getDeliveryAddress() != null ? request.getDeliveryAddress().getFullName() : customerName)
                 .addressPhone(request.getDeliveryAddress() != null ? request.getDeliveryAddress().getPhoneNumber() : customerPhone)
                 .addressLine(request.getDeliveryAddress() != null ? request.getDeliveryAddress().getAddressLine() : "")
@@ -78,6 +91,22 @@ public class OrderController {
 
         if (request.getItems() != null) {
             for (var itemDto : request.getItems()) {
+                if (itemDto.getProductId() != null) {
+                    productRepository.findById(itemDto.getProductId()).ifPresent(prod -> {
+                        int requestedQty = itemDto.getQuantity() != null && itemDto.getQuantity() > 0 ? itemDto.getQuantity() : 1;
+                        int currentStock = prod.getStockQuantity() != null ? prod.getStockQuantity() : 0;
+                        if (currentStock < requestedQty) {
+                            throw new com.bakery.cottage.exception.BusinessException("Insufficient stock available for " + prod.getName() + " (Available: " + currentStock + ")");
+                        }
+                        int updatedStock = currentStock - requestedQty;
+                        prod.setStockQuantity(updatedStock);
+                        if (updatedStock <= 0) {
+                            prod.setAvailable(false);
+                        }
+                        productRepository.save(prod);
+                    });
+                }
+
                 OrderItem item = OrderItem.builder()
                         .productId(itemDto.getProductId())
                         .productName(itemDto.getProductName())

@@ -41,6 +41,7 @@ public class ShopkeeperControllerTest {
 
     @MockitoBean private ShopkeeperService shopkeeperService;
     @MockitoBean private ProductService productService;
+    @MockitoBean private com.bakery.cottage.service.AdminDeliveryPartnerService adminDeliveryPartnerService;
     @MockitoBean private JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @TestConfiguration
@@ -178,5 +179,51 @@ public class ShopkeeperControllerTest {
         mockMvc.perform(get("/shopkeeper/products"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].name").value("Plum Cake"));
+    }
+
+    @Test
+    void getDeliveryPartners_Returns200Ok() throws Exception {
+        DeliveryPartnerDTO partner = DeliveryPartnerDTO.builder()
+                .id("dp-1")
+                .fullName("Ravi Kumar")
+                .phoneNumber("9876543210")
+                .status("ACTIVE")
+                .build();
+
+        when(adminDeliveryPartnerService.getAllDeliveryPartners()).thenReturn(List.of(partner));
+
+        mockMvc.perform(get("/shopkeeper/delivery-partners"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].fullName").value("Ravi Kumar"));
+    }
+
+    @Test
+    void assignDeliveryPartner_WithCustomDeliveryCharge_Returns200Ok() throws Exception {
+        AssignDeliveryPartnerRequest request = AssignDeliveryPartnerRequest.builder()
+                .deliveryPartnerId("dp-1")
+                .deliveryCharge(BigDecimal.valueOf(80))
+                .deliveryNotes("Handle delicate cake carefully")
+                .build();
+
+        OrderDTO orderDTO = OrderDTO.builder()
+                .id("order-1")
+                .orderNumber("PBC-1001")
+                .deliveryPartnerId("dp-1")
+                .deliveryCharge(BigDecimal.valueOf(80))
+                .deliveryChargeText("Rs. 80")
+                .grandTotal(BigDecimal.valueOf(880))
+                .orderStatus(OrderStatus.OUT_FOR_DELIVERY)
+                .build();
+
+        when(adminDeliveryPartnerService.assignOrderToDeliveryPartner(eq("order-1"), any(AssignDeliveryPartnerRequest.class), anyString(), any()))
+                .thenReturn(orderDTO);
+
+        mockMvc.perform(post("/shopkeeper/orders/order-1/assign-delivery-partner")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deliveryPartnerId").value("dp-1"))
+                .andExpect(jsonPath("$.deliveryCharge").value(80))
+                .andExpect(jsonPath("$.orderStatus").value("OUT_FOR_DELIVERY"));
     }
 }

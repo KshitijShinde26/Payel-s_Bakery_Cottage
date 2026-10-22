@@ -1,9 +1,11 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import type { Product } from '@/features/catalog/types'
+import { productService } from '@/features/catalog/services/productService'
 import { useCart } from '@/features/cart/hooks/useCart'
 import { useWishlist } from '@/features/wishlist/hooks/useWishlist'
-import { Heart, ShoppingBag, Star, Sparkles } from 'lucide-react'
+import { Heart, ShoppingBag, Star, Sparkles, AlertCircle } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 export interface ProductCardProps {
   product: Product
@@ -16,10 +18,42 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const { isInWishlist, addToWishlist, removeFromWishlist } = useWishlist()
   const wishlisted = isInWishlist(product.id)
 
+  const [currentStock, setCurrentStock] = useState<number>(() =>
+    productService.getProductStock(product.id, product.stockQuantity)
+  )
+
+  useEffect(() => {
+    setCurrentStock(productService.getProductStock(product.id, product.stockQuantity))
+  }, [product.id, product.stockQuantity])
+
+  useEffect(() => {
+    const handleStockChange = (e: Event) => {
+      const customEvent = e as CustomEvent
+      if (customEvent.detail && String(customEvent.detail.productId) === String(product.id)) {
+        setCurrentStock(Number(customEvent.detail.stockQuantity))
+      }
+    }
+    window.addEventListener('pbc-stock-changed', handleStockChange)
+    return () => {
+      window.removeEventListener('pbc-stock-changed', handleStockChange)
+    }
+  }, [product.id])
+
+  const isOutOfStock = !product.isAvailable || currentStock <= 0
+
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    await addToCart({ product })
+
+    if (isOutOfStock) {
+      toast.error(`Sorry, there is no stock available for "${product.name}".`, {
+        duration: 4000,
+        icon: '⚠️',
+      })
+      return
+    }
+
+    await addToCart({ product: { ...product, stockQuantity: currentStock } })
   }
 
   const handleWishlist = async (e: React.MouseEvent) => {
@@ -79,7 +113,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
 
         {/* Availability Badge */}
-        {!product.isAvailable && (
+        {isOutOfStock && (
           <div className="absolute inset-0 bg-stone-900/60 backdrop-blur-[2px] flex items-center justify-center z-20">
             <span className="rounded-full bg-red-600 px-3.5 py-1 text-xs font-bold text-white uppercase tracking-wider shadow-md">
               Out of Stock
@@ -116,6 +150,26 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           <p className="mt-1 text-xs text-stone-500 line-clamp-2 leading-relaxed">
             {product.shortDescription}
           </p>
+
+          {/* Real-time Cake Stock Indicator */}
+          <div className="mt-2.5 flex items-center gap-1.5">
+            {currentStock > 5 ? (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200/60 px-2.5 py-0.5 rounded-full">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                <span>{currentStock} available</span>
+              </span>
+            ) : currentStock > 0 ? (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-900 bg-amber-50 border border-amber-300 px-2.5 py-0.5 rounded-full animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                <span>Only {currentStock} left!</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-red-800 bg-red-50 border border-red-200 px-2.5 py-0.5 rounded-full">
+                <AlertCircle className="w-3 h-3 text-red-600" />
+                <span>0 in stock</span>
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Price & Action Row */}
@@ -146,14 +200,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             <button
               type="button"
               onClick={handleAddToCart}
-              disabled={!product.isAvailable}
-              aria-label={`Add ${product.name} to cart`}
+              aria-label={isOutOfStock ? `No stock available for ${product.name}` : `Add ${product.name} to cart`}
               className={`flex items-center justify-center h-9 w-9 rounded-xl transition-all cursor-pointer ${
-                product.isAvailable
+                !isOutOfStock
                   ? 'bg-amber-600 text-white hover:bg-amber-700 shadow-xs hover:shadow-md'
-                  : 'bg-stone-200 text-stone-400 cursor-not-allowed'
+                  : 'bg-stone-200 text-stone-500 hover:bg-rose-100 hover:text-rose-700'
               }`}
-              title={product.isAvailable ? 'Add to Cart' : 'Out of Stock'}
+              title={isOutOfStock ? 'Out of Stock - Click for details' : 'Add to Cart'}
             >
               <ShoppingBag className="h-4 w-4" />
             </button>

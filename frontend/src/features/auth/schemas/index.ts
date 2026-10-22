@@ -20,7 +20,7 @@ export const loginSchema = z.object({
 
 export const registerSchema = z
   .object({
-    role: z.enum(['CUSTOMER', 'SHOPKEEPER', 'ADMIN'], {
+    role: z.enum(['CUSTOMER', 'SHOPKEEPER'], {
       message: 'Please select a registration role',
     }),
 

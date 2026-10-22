@@ -178,6 +178,18 @@ public class AdminController {
         return ResponseEntity.ok(updated);
     }
 
+    @PutMapping("/products/{id}/stock")
+    @Operation(summary = "Directly update product inventory stock quantity")
+    public ResponseEntity<ProductDTO> updateProductStock(
+            @PathVariable String id,
+            @Valid @RequestBody UpdateStockRequest request,
+            Principal principal,
+            HttpServletRequest servletRequest) {
+        String adminEmail = principal != null ? principal.getName() : "admin";
+        ProductDTO updated = productService.updateStock(id, request.getStockQuantity(), adminEmail, servletRequest.getRemoteAddr());
+        return ResponseEntity.ok(updated);
+    }
+
     @DeleteMapping("/products/{id}")
     @Operation(summary = "Safely soft-delete an existing product without corrupting order history")
     public ResponseEntity<Map<String, String>> deleteProduct(

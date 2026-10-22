@@ -20,13 +20,16 @@ public class AdminOrderService {
     private final OrderRepository orderRepository;
     private final AuditService auditService;
     private final com.bakery.cottage.repository.UserRepository userRepository;
+    private final com.bakery.cottage.repository.ProductRepository productRepository;
 
     public AdminOrderService(OrderRepository orderRepository,
                              AuditService auditService,
-                             com.bakery.cottage.repository.UserRepository userRepository) {
+                             com.bakery.cottage.repository.UserRepository userRepository,
+                             com.bakery.cottage.repository.ProductRepository productRepository) {
         this.orderRepository = orderRepository;
         this.auditService = auditService;
         this.userRepository = userRepository;
+        this.productRepository = productRepository;
     }
 
     @Transactional(readOnly = true)
@@ -51,11 +54,33 @@ public class AdminOrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + id));
 
         String oldStatus = (order.getOrderStatus() != null) ? order.getOrderStatus().name() : "CONFIRMED";
+        OrderStatus targetStatus;
         try {
-            order.setOrderStatus(OrderStatus.valueOf(newStatus));
+            targetStatus = OrderStatus.valueOf(newStatus);
         } catch (Exception e) {
-            order.setOrderStatus(OrderStatus.CONFIRMED);
+            targetStatus = OrderStatus.CONFIRMED;
         }
+        order.setOrderStatus(targetStatus);
+
+        // If order was cancelled / rejected, restore stock back to previous value
+        if (targetStatus == OrderStatus.CANCELLED && !"CANCELLED".equalsIgnoreCase(oldStatus)) {
+            if (order.getItems() != null) {
+                for (var item : order.getItems()) {
+                    if (item.getProductId() != null) {
+                        productRepository.findById(item.getProductId()).ifPresent(prod -> {
+                            int qty = item.getQuantity() != null && item.getQuantity() > 0 ? item.getQuantity() : 1;
+                            int restored = (prod.getStockQuantity() != null ? prod.getStockQuantity() : 0) + qty;
+                            prod.setStockQuantity(restored);
+                            if (restored > 0) {
+                                prod.setAvailable(true);
+                            }
+                            productRepository.save(prod);
+                        });
+                    }
+                }
+            }
+        }
+
         Order updated = orderRepository.save(order);
 
         auditService.logEvent(

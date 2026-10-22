@@ -43,6 +43,9 @@ public class ProductRequest {
 
     private Boolean isAvailable;
 
+    @Min(value = 0, message = "Stock quantity cannot be negative")
+    private Integer stockQuantity;
+
     private Boolean isBestseller;
 
     private Boolean isFeatured;

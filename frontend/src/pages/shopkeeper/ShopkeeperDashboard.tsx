@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuth } from '@/features/auth/hooks/useAuth'
 import { shopkeeperService } from '@/features/shopkeeper/services/shopkeeperService'
+import { productService, CATEGORIES } from '@/features/catalog/services/productService'
 import type {
   Order,
   OrderStatus,
@@ -11,7 +12,6 @@ import type {
   ShopkeeperSummary,
   Product,
 } from '@/features/shopkeeper/types'
-import { CATEGORIES } from '@/features/catalog/services/productService'
 import { Button } from '@/components/ui/Button'
 import toast from 'react-hot-toast'
 import {
@@ -34,6 +34,9 @@ import {
   CreditCard,
   ChefHat,
   Info,
+  Package,
+  Plus,
+  Minus,
 } from 'lucide-react'
 
 const getOrderStatusBadge = (status: OrderStatus) => {
@@ -118,6 +121,150 @@ export const ShopkeeperDashboard: React.FC = () => {
     bakeryNotes: '',
   })
 
+  // Stock Editor State for Shopkeeper
+  const [editingStockId, setEditingStockId] = useState<string | null>(null)
+  const [stockInputValue, setStockInputValue] = useState<number>(0)
+  const [isUpdatingStock, setIsUpdatingStock] = useState<boolean>(false)
+
+  // Delivery Partner Assignment & Delivery Charges State
+  const [dispatchOrder, setDispatchOrder] = useState<Order | null>(null)
+  const [deliveryPartners, setDeliveryPartners] = useState<any[]>([])
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string>('')
+  const [deliveryCharge, setDeliveryCharge] = useState<number>(60)
+  const [deliveryNotes, setDeliveryNotes] = useState<string>('')
+  const [isAssigningPartner, setIsAssigningPartner] = useState<boolean>(false)
+
+  const handleStartEditStock = (prod: Product) => {
+    setEditingStockId(prod.id)
+    setStockInputValue(productService.getProductStock(prod.id, prod.stockQuantity))
+  }
+
+  const handleSaveStock = async (productId: string) => {
+    setIsUpdatingStock(true)
+    try {
+      const updatedQty = Math.max(0, Number(stockInputValue))
+      await shopkeeperService.updateProductStock(productId, updatedQty)
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === productId ? { ...p, stockQuantity: updatedQty, isAvailable: updatedQty > 0 } : p
+        )
+      )
+      setEditingStockId(null)
+      toast.success(`Cake stock updated to ${updatedQty} units!`)
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to update stock quantity.')
+    } finally {
+      setIsUpdatingStock(false)
+    }
+  }
+
+  // Open Dispatch & Delivery Charges Modal when cake is ready
+  const handleOpenDispatchModal = (order: Order) => {
+    setDispatchOrder(order)
+    setDeliveryCharge(order.deliveryCharge != null ? order.deliveryCharge : 60)
+    setDeliveryNotes(order.deliveryNotes || '')
+
+    const activePartners = deliveryPartners.filter((p) => p.enabled !== false && p.status !== 'INACTIVE')
+    if (order.deliveryPartnerId) {
+      setSelectedPartnerId(order.deliveryPartnerId)
+    } else if (activePartners.length > 0) {
+      setSelectedPartnerId(activePartners[0].userId || activePartners[0].id)
+    } else if (deliveryPartners.length > 0) {
+      setSelectedPartnerId(deliveryPartners[0].userId || deliveryPartners[0].id)
+    } else {
+      setSelectedPartnerId('inhouse-courier')
+    }
+  }
+
+  // Confirm Courier Dispatch & Save Adjusted Delivery Charge
+  const handleConfirmDispatch = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!dispatchOrder) return
+
+    if (!selectedPartnerId) {
+      toast.error('Please choose a delivery partner.')
+      return
+    }
+
+    setIsAssigningPartner(true)
+    try {
+      const adjustedCharge = Math.max(0, Number(deliveryCharge) || 0)
+      const selectedPartner = deliveryPartners.find(
+        (p) => p.userId === selectedPartnerId || p.id === selectedPartnerId
+      )
+      const partnerName = selectedPartner ? selectedPartner.fullName : 'In-House Bakery Courier'
+      const partnerPhone = selectedPartner ? selectedPartner.phoneNumber : ''
+
+      const payload = {
+        deliveryPartnerId: selectedPartnerId,
+        deliveryCharge: adjustedCharge,
+        deliveryNotes: deliveryNotes.trim() || undefined,
+      }
+
+      let updatedOrder: Order
+      try {
+        updatedOrder = await shopkeeperService.assignDeliveryPartner(dispatchOrder.id, payload)
+      } catch (err) {
+        const subtotal = dispatchOrder.subtotal ?? (Number(dispatchOrder.grandTotal) - (dispatchOrder.deliveryCharge ?? 60))
+        updatedOrder = {
+          ...dispatchOrder,
+          deliveryPartnerId: selectedPartnerId,
+          deliveryPartnerName: partnerName,
+          deliveryPartnerPhone: partnerPhone,
+          deliveryCharge: adjustedCharge,
+          deliveryChargeText: `Rs. ${adjustedCharge}`,
+          grandTotal: subtotal + adjustedCharge,
+          orderStatus: 'OUT_FOR_DELIVERY',
+          outForDeliveryAt: new Date().toISOString(),
+          deliveryNotes: deliveryNotes.trim() || undefined,
+        }
+      }
+
+      // Update state
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === updatedOrder.id
+            ? {
+                ...o,
+                ...updatedOrder,
+                deliveryCharge: adjustedCharge,
+                deliveryChargeText: `Rs. ${adjustedCharge}`,
+                orderStatus: 'OUT_FOR_DELIVERY',
+                deliveryPartnerName: updatedOrder.deliveryPartnerName || partnerName,
+                deliveryPartnerPhone: updatedOrder.deliveryPartnerPhone || partnerPhone,
+              }
+            : o
+        )
+      )
+
+      if (selectedOrder?.id === updatedOrder.id) {
+        setSelectedOrder((prev) =>
+          prev
+            ? {
+                ...prev,
+                ...updatedOrder,
+                deliveryCharge: adjustedCharge,
+                deliveryChargeText: `Rs. ${adjustedCharge}`,
+                orderStatus: 'OUT_FOR_DELIVERY',
+                deliveryPartnerName: updatedOrder.deliveryPartnerName || partnerName,
+                deliveryPartnerPhone: updatedOrder.deliveryPartnerPhone || partnerPhone,
+              }
+            : null
+        )
+      }
+
+      toast.success(
+        `Order #${dispatchOrder.orderNumber || dispatchOrder.id} dispatched! Delivery charge set to Rs. ${adjustedCharge}.`
+      )
+      setDispatchOrder(null)
+      shopkeeperService.getSummary().then(setSummary).catch(() => {})
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to dispatch order and assign courier.')
+    } finally {
+      setIsAssigningPartner(false)
+    }
+  }
+
   // Sync hash with active tab state
   useEffect(() => {
     const hash = location.hash.replace('#', '').toLowerCase()
@@ -134,19 +281,45 @@ export const ShopkeeperDashboard: React.FC = () => {
     }
   }, [location.hash])
 
+  // Real-time cross-component stock synchronization
+  useEffect(() => {
+    const handleStockChange = (e: Event) => {
+      const customEvent = e as CustomEvent
+      if (customEvent.detail?.productId) {
+        setProducts((prev) =>
+          prev.map((p) =>
+            String(p.id) === String(customEvent.detail.productId)
+              ? {
+                  ...p,
+                  stockQuantity: Number(customEvent.detail.stockQuantity),
+                  isAvailable: Number(customEvent.detail.stockQuantity) > 0,
+                }
+              : p
+          )
+        )
+      }
+    }
+    window.addEventListener('pbc-stock-changed', handleStockChange)
+    return () => {
+      window.removeEventListener('pbc-stock-changed', handleStockChange)
+    }
+  }, [])
+
   // Fetch all bakery data
   const fetchData = async () => {
     try {
-      const [summaryData, ordersList, cakesList, productsList] = await Promise.all([
+      const [summaryData, ordersList, cakesList, productsList, partnersList] = await Promise.all([
         shopkeeperService.getSummary(),
         shopkeeperService.getOrders(),
         shopkeeperService.getCustomCakes(),
         shopkeeperService.getProducts(),
+        shopkeeperService.getDeliveryPartners(),
       ])
       setSummary(summaryData)
       setOrders(ordersList)
       setCustomCakes(cakesList)
       setProducts(productsList)
+      setDeliveryPartners(partnersList)
     } catch (err) {
       console.error('Failed to load shopkeeper data', err)
       toast.error('Failed to refresh live bakery data.')
@@ -169,7 +342,20 @@ export const ShopkeeperDashboard: React.FC = () => {
 
   // Quick Order Status Transition
   const handleStatusChange = async (orderId: string, nextStatus: OrderStatus, notes?: string) => {
+    // When cake is ready and shopkeeper dispatches, trigger the delivery partner & charges modal
+    if (nextStatus === 'OUT_FOR_DELIVERY') {
+      const targetOrder =
+        orders.find((o) => o.id === orderId) || (selectedOrder?.id === orderId ? selectedOrder : null)
+      if (targetOrder) {
+        handleOpenDispatchModal(targetOrder)
+        return
+      }
+    }
+
     try {
+      const targetOrder = orders.find((o) => o.id === orderId)
+      const previousStatus = targetOrder?.orderStatus
+
       const updated = await shopkeeperService.updateOrderStatus(orderId, {
         status: nextStatus,
         kitchenNotes: notes,
@@ -178,7 +364,17 @@ export const ShopkeeperDashboard: React.FC = () => {
       if (selectedOrder?.id === updated.id) {
         setSelectedOrder(updated)
       }
-      toast.success(`Order #${updated.orderNumber || updated.id} updated to ${nextStatus.replace(/_/g, ' ')}`)
+
+      // If shopkeeper rejected/cancelled the order, restore stock back to previous value!
+      if (nextStatus === 'CANCELLED' && previousStatus !== 'CANCELLED' && targetOrder?.items) {
+        productService.restoreStockForOrder(
+          targetOrder.items.map((it) => ({ productId: it.productId, quantity: it.quantity }))
+        )
+        toast.success(`Order #${updated.orderNumber || updated.id} rejected. Stock restored to previous value!`)
+      } else {
+        toast.success(`Order #${updated.orderNumber || updated.id} updated to ${nextStatus.replace(/_/g, ' ')}`)
+      }
+
       shopkeeperService.getSummary().then(setSummary)
     } catch (err: any) {
       toast.error(err?.message || 'Failed to update order status.')
@@ -381,7 +577,7 @@ export const ShopkeeperDashboard: React.FC = () => {
           }`}
         >
           <CakeSlice className="w-4 h-4" />
-          Product Reference ({products.length})
+          Cake Stock & Products ({products.length})
         </button>
 
         <button
@@ -681,9 +877,10 @@ export const ShopkeeperDashboard: React.FC = () => {
                           {order.orderStatus === 'READY' && (
                             <button
                               type="button"
-                              onClick={() => handleStatusChange(order.id, 'OUT_FOR_DELIVERY')}
-                              className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold cursor-pointer"
+                              onClick={() => handleOpenDispatchModal(order)}
+                              className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold cursor-pointer flex items-center gap-1 shadow-xs"
                             >
+                              <Truck className="w-3 h-3" />
                               Dispatch
                             </button>
                           )}
@@ -840,9 +1037,10 @@ export const ShopkeeperDashboard: React.FC = () => {
                         {order.orderStatus === 'READY' && (
                           <button
                             type="button"
-                            onClick={() => handleStatusChange(order.id, 'OUT_FOR_DELIVERY')}
-                            className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-sm cursor-pointer"
+                            onClick={() => handleOpenDispatchModal(order)}
+                            className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-sm cursor-pointer flex items-center gap-1.5"
                           >
+                            <Truck className="w-3.5 h-3.5" />
                             Dispatch Courier
                           </button>
                         )}
@@ -1051,7 +1249,7 @@ export const ShopkeeperDashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Product Grid (Read-Only) */}
+          {/* Product Grid with Stock Management Controls */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {products.length === 0 ? (
               <div className="bg-white rounded-2xl p-12 text-center border border-stone-200 shadow-sm col-span-full">
@@ -1066,72 +1264,158 @@ export const ShopkeeperDashboard: React.FC = () => {
                 No products found matching your filter criteria.
               </div>
             ) : (
-              filteredProducts.map((prod) => (
-                <div
-                  key={prod.id}
-                  className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden flex flex-col justify-between hover:shadow-md transition-all group"
-                >
-                  <div>
-                    <div className="relative aspect-4/3 bg-stone-100 overflow-hidden">
-                      <img
-                        src={prod.image || '/images/Product_1.jpeg'}
-                        alt={prod.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        onError={(e) => {
-                          ;(e.target as HTMLImageElement).src = '/images/Product_1.jpeg'
-                        }}
-                      />
-                      <div className="absolute top-2 left-2 flex flex-wrap gap-1">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-stone-900/80 text-white backdrop-blur-xs">
-                          {prod.category}
-                        </span>
-                        {prod.isEggless && (
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-700 text-white">
-                            Eggless
+              filteredProducts.map((prod) => {
+                const liveStock = productService.getProductStock(prod.id, prod.stockQuantity)
+                const isEditingThis = editingStockId === prod.id
+
+                return (
+                  <div
+                    key={prod.id}
+                    className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden flex flex-col justify-between hover:shadow-md transition-all group"
+                  >
+                    <div>
+                      <div className="relative aspect-4/3 bg-stone-100 overflow-hidden">
+                        <img
+                          src={prod.image || '/images/Product_1.jpeg'}
+                          alt={prod.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          onError={(e) => {
+                            ;(e.target as HTMLImageElement).src = '/images/Product_1.jpeg'
+                          }}
+                        />
+                        <div className="absolute top-2 left-2 flex flex-wrap gap-1">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-stone-900/80 text-white backdrop-blur-xs">
+                            {prod.category}
                           </span>
-                        )}
+                          {prod.isEggless && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-700 text-white">
+                              Eggless
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold shadow-md ${
+                              liveStock > 5
+                                ? 'bg-emerald-600 text-white'
+                                : liveStock > 0
+                                ? 'bg-amber-600 text-white'
+                                : 'bg-red-600 text-white'
+                            }`}
+                          >
+                            {liveStock > 0 ? `${liveStock} in stock` : 'Out of Stock'}
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="absolute top-2 right-2">
-                        <span
-                          className={`px-2.5 py-1 rounded-full text-[10px] font-bold shadow-md ${
-                            prod.isAvailable ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'
-                          }`}
-                        >
-                          {prod.isAvailable ? 'In Stock' : 'Out of Stock'}
-                        </span>
+                      <div className="p-4">
+                        <h4 className="font-serif font-bold text-stone-900 text-sm line-clamp-1">{prod.name}</h4>
+                        <p className="text-xs text-stone-500 mt-1 line-clamp-2">
+                          {prod.shortDescription || prod.description}
+                        </p>
+
+                        <div className="flex items-baseline gap-2 mt-3">
+                          <span className="text-base font-bold text-stone-900">₹{prod.price}</span>
+                          {prod.originalPrice && prod.originalPrice > prod.price && (
+                            <span className="text-xs text-stone-400 line-through">₹{prod.originalPrice}</span>
+                          )}
+                        </div>
+
+                        {prod.weightOptions && (
+                          <p className="text-[11px] text-stone-500 mt-1">
+                            Options:{' '}
+                            {Array.isArray(prod.weightOptions) ? prod.weightOptions.join(', ') : prod.weightOptions}
+                          </p>
+                        )}
+
+                        {prod.minLeadTimeHours && (
+                          <p className="text-[11px] text-amber-700 mt-0.5">
+                            Min Prep Time: {prod.minLeadTimeHours} hours
+                          </p>
+                        )}
                       </div>
                     </div>
 
-                    <div className="p-4">
-                      <h4 className="font-serif font-bold text-stone-900 text-sm line-clamp-1">{prod.name}</h4>
-                      <p className="text-xs text-stone-500 mt-1 line-clamp-2">
-                        {prod.shortDescription || prod.description}
-                      </p>
+                    {/* Stock Management Section for Shopkeeper */}
+                    <div className="p-4 pt-0">
+                      <div className="pt-3 border-t border-stone-100 bg-stone-50/60 -mx-4 -mb-4 p-4 rounded-b-2xl">
+                        <div className="flex items-center justify-between mb-2 text-xs">
+                          <span className="font-bold text-stone-700 flex items-center gap-1.5">
+                            <Package className="w-3.5 h-3.5 text-amber-700" />
+                            Available Stock
+                          </span>
+                          <span
+                            className={`font-mono font-bold text-xs ${
+                              liveStock > 5
+                                ? 'text-emerald-700'
+                                : liveStock > 0
+                                ? 'text-amber-700'
+                                : 'text-red-600'
+                            }`}
+                          >
+                            {liveStock} cakes
+                          </span>
+                        </div>
 
-                      <div className="flex items-baseline gap-2 mt-3">
-                        <span className="text-base font-bold text-stone-900">₹{prod.price}</span>
-                        {prod.originalPrice && prod.originalPrice > prod.price && (
-                          <span className="text-xs text-stone-400 line-through">₹{prod.originalPrice}</span>
+                        {isEditingThis ? (
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setStockInputValue((v) => Math.max(0, v - 1))}
+                                className="w-8 h-8 rounded-lg bg-stone-200 text-stone-800 font-bold hover:bg-stone-300 flex items-center justify-center cursor-pointer"
+                              >
+                                -
+                              </button>
+                              <input
+                                type="number"
+                                min="0"
+                                value={stockInputValue}
+                                onChange={(e) => setStockInputValue(Math.max(0, parseInt(e.target.value) || 0))}
+                                className="w-full text-center px-2 py-1 text-xs font-bold border border-amber-300 rounded-lg bg-white text-stone-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setStockInputValue((v) => v + 1)}
+                                className="w-8 h-8 rounded-lg bg-stone-200 text-stone-800 font-bold hover:bg-stone-300 flex items-center justify-center cursor-pointer"
+                              >
+                                +
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() => handleSaveStock(prod.id)}
+                                disabled={isUpdatingStock}
+                                className="flex-1 text-xs bg-amber-600 hover:bg-amber-700 text-white font-bold py-1.5 rounded-lg cursor-pointer"
+                              >
+                                {isUpdatingStock ? 'Saving...' : 'Update Stock'}
+                              </Button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingStockId(null)}
+                                className="text-xs text-stone-500 hover:text-stone-800 px-2 py-1 cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleStartEditStock(prod)}
+                            className="w-full py-2 px-3 rounded-xl bg-amber-100/70 hover:bg-amber-200/80 text-amber-900 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer border border-amber-200"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>Edit Stock Quantity</span>
+                          </button>
                         )}
                       </div>
-
-                      {prod.weightOptions && (
-                        <p className="text-[11px] text-stone-500 mt-1">
-                          Options:{' '}
-                          {Array.isArray(prod.weightOptions) ? prod.weightOptions.join(', ') : prod.weightOptions}
-                        </p>
-                      )}
-
-                      {prod.minLeadTimeHours && (
-                        <p className="text-[11px] text-amber-700 mt-0.5">
-                          Min Prep Time: {prod.minLeadTimeHours} hours
-                        </p>
-                      )}
                     </div>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         </div>
@@ -1326,6 +1610,31 @@ export const ShopkeeperDashboard: React.FC = () => {
                 </div>
               </div>
 
+              {/* Ready to Deliver Action Banner */}
+              {selectedOrder.orderStatus === 'READY' && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <div>
+                      <p className="font-bold text-emerald-950 text-xs">Cake is ready for delivery!</p>
+                      <p className="text-[11px] text-emerald-800">Assign delivery partner and adjust delivery charges (Default: ₹60).</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const orderToDispatch = selectedOrder
+                      setSelectedOrder(null)
+                      handleOpenDispatchModal(orderToDispatch)
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shrink-0 flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Truck className="w-3.5 h-3.5" />
+                    Dispatch Courier & Set Charges
+                  </button>
+                </div>
+              )}
+
               {/* Delivery Logistics Status */}
               <div className="bg-purple-50/70 p-3.5 rounded-xl border border-purple-200 text-xs">
                 <span className="font-bold text-purple-900 uppercase tracking-wider text-[10px] block mb-1">
@@ -1347,8 +1656,16 @@ export const ShopkeeperDashboard: React.FC = () => {
                     )}
                   </div>
                 ) : (
-                  <p className="text-amber-800 font-medium">No delivery partner assigned yet (Handled via Admin Console)</p>
+                  <p className="text-amber-800 font-medium">No delivery partner assigned yet (Handled via Bakery Dispatch)</p>
                 )}
+
+                {/* Delivery Charges Display in Details */}
+                <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-purple-200/60">
+                  <span className="text-stone-600 font-semibold">Delivery Charges:</span>
+                  <span className="font-bold text-purple-900 text-sm">
+                    ₹{selectedOrder.deliveryCharge ?? 60}
+                  </span>
+                </div>
               </div>
 
               {/* Items List */}
@@ -1380,15 +1697,20 @@ export const ShopkeeperDashboard: React.FC = () => {
               <div className="bg-amber-50/50 p-4 rounded-xl flex items-center justify-between border border-amber-200/50">
                 <div>
                   <p className="font-bold text-stone-800">
-                    Payment Method: <span className="text-amber-900">{selectedOrder.paymentMethod}</span>
+                    Payment Method: <span className="text-amber-900">Cash on Delivery (COD)</span>
                   </p>
                   <p className="text-stone-600 text-[11px]">
-                    Status: <span className="font-bold">{selectedOrder.paymentStatus}</span> (Admin verified)
+                    Status: <span className="font-bold">{selectedOrder.paymentStatus}</span> (COD Handover)
                   </p>
                 </div>
                 <div className="text-right">
-                  <span className="text-xs text-stone-500">Grand Total</span>
-                  <p className="text-lg font-serif font-bold text-stone-900">₹{selectedOrder.grandTotal}</p>
+                  <div className="text-[11px] text-stone-500">
+                    Cake Subtotal: ₹{selectedOrder.subtotal ?? (Number(selectedOrder.grandTotal) - (selectedOrder.deliveryCharge ?? 60))}
+                  </div>
+                  <div className="text-[11px] text-amber-800 font-semibold">
+                    Delivery Charges: ₹{selectedOrder.deliveryCharge ?? 60}
+                  </div>
+                  <p className="text-lg font-serif font-bold text-stone-900">Total: ₹{selectedOrder.grandTotal}</p>
                 </div>
               </div>
 
@@ -1421,6 +1743,240 @@ export const ShopkeeperDashboard: React.FC = () => {
                 Close
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL: DISPATCH & SET DELIVERY CHARGES */}
+      {/* ========================================================================= */}
+      {dispatchOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-900/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-scaleIn">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-stone-200 flex items-center justify-between bg-stone-50">
+              <div>
+                <h3 className="font-serif font-bold text-stone-900 text-base flex items-center gap-2">
+                  <Truck className="w-5 h-5 text-purple-600" />
+                  Dispatch Cake Order #{dispatchOrder.orderNumber || dispatchOrder.id}
+                </h3>
+                <p className="text-xs text-stone-500">
+                  Cake is ready for delivery! Choose a delivery partner and set delivery charges.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDispatchOrder(null)}
+                className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-200 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <form onSubmit={handleConfirmDispatch} className="p-6 overflow-y-auto space-y-5 text-xs">
+              {/* Delivery Destination Summary */}
+              <div className="bg-stone-50 p-4 rounded-xl border border-stone-200/80 space-y-1.5">
+                <span className="font-bold text-stone-500 uppercase tracking-wider text-[10px] block">
+                  Delivery Destination
+                </span>
+                <p className="font-bold text-stone-900 text-sm">
+                  {dispatchOrder.deliveryAddress?.fullName || 'Customer'}
+                </p>
+                <p className="text-stone-600 flex items-center gap-1">
+                  <Phone className="w-3.5 h-3.5 text-stone-400" />
+                  {dispatchOrder.deliveryAddress?.phoneNumber || 'No phone'}
+                </p>
+                <p className="text-stone-600 flex items-start gap-1">
+                  <MapPin className="w-3.5 h-3.5 text-stone-400 shrink-0 mt-0.5" />
+                  <span>
+                    {dispatchOrder.deliveryAddress?.addressLine}, {dispatchOrder.deliveryAddress?.areaLocality},{' '}
+                    {dispatchOrder.deliveryAddress?.city} - {dispatchOrder.deliveryAddress?.pincode}
+                  </span>
+                </p>
+                {dispatchOrder.preferredDeliveryDate && (
+                  <p className="text-amber-800 font-semibold pt-1 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-amber-700" />
+                    Slot: {dispatchOrder.preferredDeliveryDate} • {dispatchOrder.preferredDeliveryTime}
+                  </p>
+                )}
+              </div>
+
+              {/* Delivery Partner Selection */}
+              <div>
+                <label className="block font-bold text-stone-800 text-xs mb-1.5">
+                  Select Delivery Partner / Courier <span className="text-rose-500">*</span>
+                </label>
+                {deliveryPartners.length > 0 ? (
+                  <div className="space-y-2">
+                    <select
+                      value={selectedPartnerId}
+                      onChange={(e) => setSelectedPartnerId(e.target.value)}
+                      className="w-full px-3 py-2.5 bg-stone-50 border border-stone-300 rounded-xl text-xs font-medium text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                    >
+                      {deliveryPartners.map((partner) => (
+                        <option key={partner.userId || partner.id} value={partner.userId || partner.id}>
+                          {partner.fullName} ({partner.phoneNumber || 'No phone'}) — {partner.serviceArea || 'General Area'}
+                        </option>
+                      ))}
+                      <option value="inhouse-courier">Bakery In-House Courier Dispatch</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-amber-50 rounded-xl border border-amber-200">
+                    <p className="text-amber-900 font-semibold">Bakery In-House Courier</p>
+                    <p className="text-amber-700 text-[11px] mt-0.5">
+                      Direct store dispatch will be assigned for this delivery.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Delivery Charges Adjustment Section (Default Rs. 60) */}
+              <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-serif font-bold text-stone-900 text-sm flex items-center gap-1.5">
+                      Delivery Charges (₹)
+                    </h4>
+                    <p className="text-[11px] text-stone-600">
+                      Default is Rs. 60. Adjust amount up or down as needed.
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-200/70 text-amber-900 border border-amber-300">
+                    Default: ₹60
+                  </span>
+                </div>
+
+                {/* Stepper & Number Input */}
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setDeliveryCharge((prev) => Math.max(0, Number(prev) - 10))}
+                    className="w-10 h-10 rounded-xl bg-white border border-stone-300 text-stone-800 hover:bg-stone-100 flex items-center justify-center font-bold text-base cursor-pointer shadow-xs active:scale-95 transition-all"
+                    title="Decrease Delivery Charge by Rs. 10"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+
+                  <div className="relative flex-1">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-stone-500">
+                      ₹
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="5"
+                      value={deliveryCharge}
+                      onChange={(e) => setDeliveryCharge(Math.max(0, Number(e.target.value) || 0))}
+                      className="w-full pl-8 pr-4 py-2.5 bg-white border border-stone-300 rounded-xl text-base font-bold text-stone-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 text-center font-mono"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setDeliveryCharge((prev) => Number(prev) + 10)}
+                    className="w-10 h-10 rounded-xl bg-white border border-stone-300 text-stone-800 hover:bg-stone-100 flex items-center justify-center font-bold text-base cursor-pointer shadow-xs active:scale-95 transition-all"
+                    title="Increase Delivery Charge by Rs. 10"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                  <span className="text-[10px] font-bold text-stone-500 uppercase tracking-wider mr-1">
+                    Presets:
+                  </span>
+                  {[0, 40, 60, 80, 100, 120].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setDeliveryCharge(preset)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                        Number(deliveryCharge) === preset
+                          ? 'bg-amber-700 text-white shadow-xs'
+                          : 'bg-white border border-stone-200 text-stone-700 hover:bg-stone-100'
+                      }`}
+                    >
+                      ₹{preset} {preset === 60 ? '(Default)' : ''}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Order Amount & Cash on Delivery Summary */}
+              <div className="p-4 rounded-xl bg-purple-50/70 border border-purple-200/80 space-y-2">
+                <div className="flex justify-between text-stone-600 text-xs">
+                  <span>Cake Items Subtotal:</span>
+                  <span className="font-bold text-stone-900">
+                    ₹{dispatchOrder.subtotal ?? (Number(dispatchOrder.grandTotal) - (dispatchOrder.deliveryCharge ?? 60))}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-purple-900 font-medium">Adjusted Delivery Charges:</span>
+                  <span className="font-bold text-purple-900">₹{deliveryCharge}</span>
+                </div>
+                <div className="pt-2 border-t border-purple-200 flex justify-between items-baseline">
+                  <div>
+                    <span className="font-bold text-stone-900 text-xs block">
+                      Total Cash on Delivery (COD):
+                    </span>
+                    <span className="text-[10px] text-stone-500">
+                      Payment Mode: Cash on Delivery (Courier collects on delivery)
+                    </span>
+                  </div>
+                  <span className="font-serif font-bold text-purple-950 text-lg">
+                    ₹{(dispatchOrder.subtotal ?? (Number(dispatchOrder.grandTotal) - (dispatchOrder.deliveryCharge ?? 60))) + Number(deliveryCharge)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Courier Delivery Notes */}
+              <div>
+                <label className="block font-bold text-stone-800 text-xs mb-1">
+                  Courier Handling Notes (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={deliveryNotes}
+                  onChange={(e) => setDeliveryNotes(e.target.value)}
+                  placeholder="e.g. Handle with extra care, keep cake level, call customer on arrival"
+                  className="w-full px-3 py-2 bg-stone-50 border border-stone-300 rounded-xl text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              {/* Modal Footer Actions */}
+              <div className="pt-2 flex items-center justify-end gap-3 border-t border-stone-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDispatchOrder(null)}
+                  disabled={isAssigningPartner}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={isAssigningPartner}
+                  className="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs gap-1.5 shadow-sm"
+                >
+                  {isAssigningPartner ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Dispatching...
+                    </>
+                  ) : (
+                    <>
+                      <Truck className="w-3.5 h-3.5" />
+                      Confirm Dispatch & Set ₹{deliveryCharge} Charge
+                    </>
+                  )}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

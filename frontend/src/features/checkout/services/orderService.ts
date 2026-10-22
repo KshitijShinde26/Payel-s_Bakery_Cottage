@@ -25,12 +25,16 @@ export const orderService = {
     const subtotal = orderItems.reduce((acc, curr) => acc + curr.subtotal, 0)
     const orderNumber = `PBC-${Date.now().toString().slice(-6)}`
 
+    const deliveryCharge = 60
+    const grandTotal = subtotal + deliveryCharge
+
     const requestBody = {
       orderNumber,
       items: orderItems,
       subtotal,
-      deliveryChargeText: 'Delivery charges will be calculated by the bakery',
-      grandTotal: subtotal,
+      deliveryCharge,
+      deliveryChargeText: 'Rs. 60',
+      grandTotal,
       deliveryAddress: payload.deliveryAddress,
       preferredDeliveryDate: payload.preferredDeliveryDate,
       preferredDeliveryTime: payload.preferredDeliveryTime,

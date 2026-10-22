@@ -15,5 +15,7 @@ public class AssignDeliveryPartnerRequest {
     @NotBlank(message = "Delivery partner ID is required")
     private String deliveryPartnerId;
 
+    private java.math.BigDecimal deliveryCharge;
+
     private String deliveryNotes;
 }

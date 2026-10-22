@@ -1,5 +1,6 @@
 import { apiClient } from '@/lib/apiClient'
 import type { Product } from '@/features/catalog/types'
+import { applyStockOverride, productService } from '@/features/catalog/services/productService'
 import type {
   AdminSummary,
   AdminUser,
@@ -117,22 +118,29 @@ export const adminService = {
         ...(search && search.trim() ? { search: search.trim() } : {}),
       },
     })
+    if (Array.isArray(response.data)) {
+      return response.data.map(applyStockOverride)
+    }
     return response.data
   },
 
   async getAdminProductById(id: string): Promise<Product> {
     const response = await apiClient.get<Product>(`/admin/products/${id}`)
-    return response.data
+    return applyStockOverride(response.data)
   },
 
   async createProduct(payload: Partial<Product>): Promise<Product> {
     const response = await apiClient.post<Product>('/admin/products', payload)
-    return response.data
+    return applyStockOverride(response.data)
   },
 
   async updateProduct(id: string, payload: Partial<Product>): Promise<Product> {
     const response = await apiClient.put<Product>(`/admin/products/${id}`, payload)
-    return response.data
+    return applyStockOverride(response.data)
+  },
+
+  async updateProductStock(id: string, stockQuantity: number): Promise<Product> {
+    return productService.updateProductStock(id, stockQuantity)
   },
 
   async toggleProductAvailability(id: string, available?: boolean): Promise<Product> {
@@ -141,7 +149,7 @@ export const adminService = {
         ...(available !== undefined ? { available } : {}),
       },
     })
-    return response.data
+    return applyStockOverride(response.data)
   },
 
   async deleteProduct(id: string): Promise<void> {

@@ -49,6 +49,7 @@ export interface DeliveryOrder {
   customerPhone: string
   customerEmail?: string
   subtotal: number
+  deliveryCharge?: number
   deliveryChargeText?: string
   grandTotal: number
   deliveryAddress: DeliveryAddress

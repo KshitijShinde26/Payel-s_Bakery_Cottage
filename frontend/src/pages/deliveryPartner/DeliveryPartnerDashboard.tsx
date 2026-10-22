@@ -370,6 +370,9 @@ export const DeliveryPartnerDashboard: React.FC = () => {
                         <span className="text-base font-bold text-stone-900">
                           ₹{Number(order.grandTotal).toFixed(2)}
                         </span>
+                        <span className="block text-[10px] text-stone-500 font-medium">
+                          Delivery: ₹{order.deliveryCharge ?? 60}
+                        </span>
                         <span
                           className={`block text-[10px] font-semibold ${
                             order.paymentStatus === 'PAID'
@@ -439,6 +442,12 @@ export const DeliveryPartnerDashboard: React.FC = () => {
                             </div>
                           ))}
                         </div>
+                      </div>
+
+                      {/* Delivery Charge Detail */}
+                      <div className="p-2 rounded-xl bg-purple-50/70 border border-purple-200 text-xs flex items-center justify-between">
+                        <span className="text-purple-900 font-semibold">Delivery Charges:</span>
+                        <span className="font-bold text-purple-950 font-mono">₹{order.deliveryCharge ?? 60}</span>
                       </div>
 
                       {/* Failure reason if applicable */}

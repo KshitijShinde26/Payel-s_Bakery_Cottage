@@ -4,6 +4,7 @@ import { useAuth } from '@/features/auth/hooks/useAuth'
 import { useCart } from '@/features/cart/hooks/useCart'
 import { addressService } from '@/features/checkout/services/addressService'
 import { orderService } from '@/features/checkout/services/orderService'
+import { productService } from '@/features/catalog/services/productService'
 import type { DeliveryAddress, DeliveryTimeSlot, PaymentMethodType } from '@/features/checkout/types'
 import { Button } from '@/components/ui/Button'
 import {
@@ -125,6 +126,20 @@ export const CheckoutPage: React.FC = () => {
 
     setIsPlacingOrder(true)
     try {
+      // Validate sufficient stock for every item in cart
+      for (const item of items) {
+        const availableStock = productService.getProductStock(item.productId)
+        if (availableStock < item.quantity) {
+          toast.error(
+            availableStock <= 0
+              ? `Sorry, "${item.name}" is out of stock! Please remove it from your cart.`
+              : `Only ${availableStock} cake${availableStock > 1 ? 's' : ''} available for "${item.name}". Please reduce your quantity.`
+          )
+          setIsPlacingOrder(false)
+          return
+        }
+      }
+
       const order = await orderService.createOrder(
         {
           items,
@@ -134,6 +149,11 @@ export const CheckoutPage: React.FC = () => {
           paymentMethod,
         },
         user?.id
+      )
+
+      // Automatically deduct stock for each cake in order
+      productService.deductStockForOrder(
+        items.map((i) => ({ productId: i.productId, quantity: i.quantity }))
       )
 
       await clearCart()

@@ -12,6 +12,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -225,6 +226,21 @@ public class AdminDeliveryPartnerService {
         order.setAssignedAt(LocalDateTime.now());
         if (request.getDeliveryNotes() != null && !request.getDeliveryNotes().isBlank()) {
             order.setDeliveryNotes(request.getDeliveryNotes().trim());
+        }
+
+        // Apply shopkeeper-adjusted delivery charges (default Rs. 60)
+        BigDecimal deliveryCharge = request.getDeliveryCharge() != null
+                ? request.getDeliveryCharge()
+                : (order.getDeliveryCharge() != null ? order.getDeliveryCharge() : BigDecimal.valueOf(60));
+        order.setDeliveryCharge(deliveryCharge);
+        order.setDeliveryChargeText("Rs. " + deliveryCharge.stripTrailingZeros().toPlainString());
+        if (order.getSubtotal() != null) {
+            order.setGrandTotal(order.getSubtotal().add(deliveryCharge));
+        }
+
+        if (order.getOrderStatus() == OrderStatus.READY) {
+            order.setOrderStatus(OrderStatus.OUT_FOR_DELIVERY);
+            order.setOutForDeliveryAt(LocalDateTime.now());
         }
 
         Order saved = orderRepository.save(order);

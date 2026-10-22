@@ -18,6 +18,7 @@ export interface Product {
   gallery?: string[]
   isEggless: boolean
   isAvailable: boolean
+  stockQuantity?: number
   isBestseller?: boolean
   isFeatured?: boolean
   shelfLife?: string

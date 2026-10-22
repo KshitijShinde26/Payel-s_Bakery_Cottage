@@ -361,7 +361,9 @@ export const OrderConfirmationPage: React.FC = () => {
             </div>
             <div className="flex justify-between text-stone-600">
               <span>Delivery Charges</span>
-              <span className="text-amber-800 italic">{order.deliveryChargeText}</span>
+              <span className="font-bold text-amber-900">
+                {order.deliveryCharge != null ? `₹${order.deliveryCharge}` : (order.deliveryChargeText || '₹60')}
+              </span>
             </div>
             <div className="border-t border-amber-100 pt-3 flex justify-between items-baseline">
               <span className="text-sm font-bold text-stone-900">Total Order Amount</span>

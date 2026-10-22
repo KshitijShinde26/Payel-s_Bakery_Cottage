@@ -30,6 +30,8 @@ public class ProductDTO {
     @JsonProperty("isAvailable")
     private boolean isAvailable;
 
+    private Integer stockQuantity;
+
     @JsonProperty("isBestseller")
     private boolean isBestseller;
 
